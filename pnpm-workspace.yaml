@@ -1,0 +1,7 @@
+packages:
+  - '.'
+  - 'legacy-api'
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true

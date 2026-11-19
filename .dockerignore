@@ -1,0 +1,8 @@
+node_modules
+.git
+.env
+.env.*
+dist
+*.zip
+legacy-api/node_modules
+legacy-api/.env
