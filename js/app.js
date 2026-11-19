@@ -135,7 +135,7 @@ function previewNotice() {
   if (getApiBase()) {
     return `<div class="preview-notice">${icon('help', 17)} <span><strong>We cannot connect right now.</strong> Account information is temporarily unavailable. Please try again later.</span><a data-link href="/profile#api-settings">Connection settings</a></div>`;
   }
-  return `<div class="preview-notice">${icon('eye', 17)} <span><strong>Customer preview.</strong> Sample balances and activity are examples. Saved own-stock products may be real listings; checkout requires a verified customer session and server confirmation.</span><a data-link href="/profile#api-settings">API status</a></div>`;
+  return `<div class="preview-notice">${icon('eye', 17)} <span><strong>Customer preview.</strong> Sample balances and activity are examples. Saved own-stock products may be real listings; checkout requires a verified customer session and server confirmation.</span><a data-link href="/profile#api-settings">Connection status</a></div>`;
 }
 
 function formatAmount(value) {
@@ -146,13 +146,13 @@ function formatAmount(value) {
 function supportTicketHistoryPanel() {
   let content;
   if (!getApiBase()) {
-    content = `<div class="empty-state"><span>${icon('eye', 23)}</span><b>Preview only</b><p>Ticket history appears here after connecting an API and signing in.</p></div>`;
+    content = `<div class="empty-state"><span>${icon('eye', 23)}</span><b>Preview only</b><p>Ticket history appears here after you sign in.</p></div>`;
   } else if (!state.user) {
     content = `<div class="empty-state"><span>${icon('user', 23)}</span><b>Sign in to view ticket history</b><p>Customer support records are only loaded for a verified session.</p><a data-link class="button button-small" href="/login">Sign in</a></div>`;
   } else if (state.supportTickets === null) {
-    content = `<div class="empty-state"><span>${icon('clock', 23)}</span><b>Loading requests…</b><p>Retrieving your support history from the API.</p></div>`;
+    content = `<div class="empty-state"><span>${icon('clock', 23)}</span><b>Loading requests…</b><p>Retrieving your support history from the server.</p></div>`;
   } else if (!state.supportTickets.length) {
-    content = `<div class="empty-state"><span>${icon('help', 23)}</span><b>No support requests yet</b><p>Your API-confirmed support requests will appear here.</p></div>`;
+    content = `<div class="empty-state"><span>${icon('help', 23)}</span><b>No support requests yet</b><p>Your support requests will appear here.</p></div>`;
   } else {
     content = `<div class="notification-list">${state.supportTickets.map((ticket) => `<article class="notification-item"><span class="notification-icon brown">${icon('help', 19)}</span><div class="notification-copy"><b>${escapeHTML(ticket.subject || ticket.title || 'Support request')}</b><p>Status: ${escapeHTML(ticket.status || '—')}</p><small>${escapeHTML(apiDate(ticket.createdAt || ticket.updatedAt))}</small></div></article>`).join('')}</div>`;
   }
@@ -260,7 +260,7 @@ function productCard(product) {
   const price = formatAmount(product.price);
   const stockCount = typeof product._count?.inventory === 'number' ? product._count.inventory : null;
   const available = typeof product.available === 'boolean' ? product.available : stockCount === null ? null : stockCount > 0;
-  const availabilityLabel = product.customLog ? `${stockCount || 0} own-stock units · ${product.checkoutEnabled ? 'wallet checkout available' : 'checkout unavailable'}` : available === true ? 'Availability subject to API confirmation' : available === false ? 'Currently unavailable' : 'Availability not confirmed';
+  const availabilityLabel = product.customLog ? `${stockCount || 0} own-stock units · ${product.checkoutEnabled ? 'wallet checkout available' : 'checkout unavailable'}` : available === true ? 'Availability confirmed at checkout' : available === false ? 'Currently unavailable' : 'Availability not confirmed';
   const availabilityClass = available === true ? 'available' : available === false ? 'unavailable' : 'pending';
   const rating = product.rating !== undefined && product.rating !== null && product.rating !== '—'
     ? `${icon('zap', 14)} <b>${escapeHTML(product.rating)}</b> <span>(${Number(product.reviews || 0).toLocaleString()} reviews)</span>`
@@ -302,8 +302,13 @@ function userTopbar() {
   return `<header class="app-topbar"><button class="icon-button mobile-only" data-action="menu" aria-label="Open account menu">${icon('menu', 21)}</button><div class="topbar-search">${icon('search', 18)}<input type="search" placeholder="Search products…" aria-label="Search products" data-search-shortcut></div><div class="topbar-actions"><a data-link class="icon-button notification-action" href="/notifications" aria-label="Notifications">${icon('bell', 20)}<i></i></a><a data-link class="account-chip" href="/profile"><span class="avatar">${escapeHTML(displayName.slice(0, 1))}</span><span class="account-chip-copy"><b>${escapeHTML(displayName)}</b><small>${accountLabel}</small></span><span class="chip-chevron">⌄</span></a>${state.user ? '<button class="button button-small topbar-logout" data-action="logout">Sign out</button>' : ''}</div></header>`;
 }
 
+function bottomTabbar(active) {
+  const tabs = [['dashboard', 'Home', paths.dashboard, 'home'], ['marketplace', 'Shop', paths.marketplace, 'grid'], ['orders', 'Orders', paths.orders, 'bag'], ['wallet', 'Wallet', paths.wallet, 'wallet'], ['profile', 'Account', paths.profile, 'user']];
+  return `<nav class="bottom-tabbar" aria-label="Quick navigation">${tabs.map(([id, label, href, glyph]) => `<a data-link href="${href}" class="${active === id ? 'active' : ''}"${active === id ? ' aria-current="page"' : ''}>${icon(glyph, 20)}<span>${label}</span></a>`).join('')}</nav>`;
+}
+
 function accountShell(active, content) {
-  return `<div class="app-shell">${sidebar(active)}<div class="app-main">${userTopbar()}<main class="app-content">${previewNotice()}${content}</main></div></div><div class="toast-slot" aria-live="polite"></div>`;
+  return `<div class="app-shell">${sidebar(active)}<div class="app-main">${userTopbar()}<main class="app-content">${previewNotice()}${content}</main></div></div>${bottomTabbar(active)}<div class="toast-slot" aria-live="polite"></div>`;
 }
 
 function metricCard(glyph, label, value, helper, tone = '') {
@@ -312,11 +317,11 @@ function metricCard(glyph, label, value, helper, tone = '') {
 
 function dashboardPage() {
   const name = state.user?.fullName || (!state.signedOut && !getApiBase() ? sampleUser.fullName : '');
-  const greeting = name ? `Good to see you, ${escapeHTML(name.split(' ')[0])}. Here’s a quick look at your account.` : 'Sign in through the connected API to view your account summary.';
+  const greeting = name ? `Good to see you, ${escapeHTML(name.split(' ')[0])}. Here’s a quick look at your account.` : 'Sign in to view your account summary.';
   return accountShell('dashboard', `${pageHeading('CUSTOMER AREA', 'Dashboard', greeting)}
     <section class="metrics-grid">
       ${metricCard('bag', 'Total orders', state.dashboard?.totalOrders ?? (getApiBase() ? '—' : '2'), state.dashboard ? 'From your account' : (getApiBase() ? 'Sign in to load account data' : 'Example activity'), 'orange')}
-      ${metricCard('wallet', 'Wallet balance', state.dashboard ? formatAmount(state.dashboard.walletBalance) : (getApiBase() ? '—' : formatNaira(12500)), state.dashboard ? 'From your wallet' : (getApiBase() ? 'Awaiting authenticated API data' : 'Example amount only'), 'brown')}
+      ${metricCard('wallet', 'Wallet balance', state.dashboard ? formatAmount(state.dashboard.walletBalance) : (getApiBase() ? '—' : formatNaira(12500)), state.dashboard ? 'From your wallet' : (getApiBase() ? 'Sign in to see your balance' : 'Example amount only'), 'brown')}
       ${metricCard('phone', 'Active numbers', state.dashboard?.activeNumbers ?? (getApiBase() ? '—' : '1'), state.dashboard ? 'From your number-provider orders' : 'Sign in to load account data', 'green')}
       ${metricCard('bell', 'Unread notices', state.dashboard?.unreadNotifications ?? (getApiBase() ? '—' : '2'), state.dashboard ? 'From notifications' : (getApiBase() ? 'Sign in to load account data' : 'Example activity'), 'yellow')}
     </section>
@@ -358,15 +363,15 @@ function productPage(id) {
   const ownId = decodedId.startsWith('ejl_');
   const product = (state.currentProduct && String(state.currentProduct.id) === decodedId ? state.currentProduct : null)
     || catalogProducts().find((item) => String(item.id) === decodedId || item.slug === decodedId)
-    || (getApiBase() || ownId ? { id: decodedId, name: state.ownProductError && ownId ? 'Product unavailable' : 'Loading product…', category: 'Logs', description: ownId && state.ownProductError ? state.ownProductError : 'Requesting product details from the marketplace API.', price: 0 } : state.productCache[0] || sampleProducts[0]);
+    || (getApiBase() || ownId ? { id: decodedId, name: state.ownProductError && ownId ? 'Product unavailable' : 'Loading product…', category: 'Logs', description: ownId && state.ownProductError ? state.ownProductError : 'Loading product details.', price: 0 } : state.productCache[0] || sampleProducts[0]);
   const category = product.category || product.categoryName || (product.categorySlug === 'virtual-numbers' ? 'Virtual Numbers' : 'Logs');
   const rating = product.rating && product.rating !== '—'
     ? `${icon('zap', 17)} <b>${escapeHTML(product.rating)}</b><span>${Number(product.reviews || 0).toLocaleString()} ${getApiBase() ? 'reviews' : 'example reviews'}</span>`
     : `${icon('zap', 17)} <b>Not rated</b><span>No rating data was returned</span>`;
-  const availability = product.available === true ? 'Availability returned by API'
+  const availability = product.available === true ? 'Availability confirmed'
     : product.available === false ? 'Currently unavailable'
-    : getApiBase() ? 'Availability not confirmed by API' : 'Example availability only';
-  const priceNote = product.customLog ? 'Own-stock listing · server-calculated unit price' : getApiBase() ? 'API-listed price · server rechecks at checkout' : 'Preview price';
+    : getApiBase() ? 'Availability not confirmed' : 'Example availability only';
+  const priceNote = product.customLog ? 'Own-stock listing · server-calculated unit price' : getApiBase() ? 'Listed price · server rechecks at checkout' : 'Preview price';
   const examplePrice = getApiBase() || product.customLog ? '' : '<del>Example</del>';
   const purchaseDisabled = (ownId && product.checkoutEnabled !== true) || product.available === false || product.name === 'Loading product…' ? 'disabled aria-disabled="true"' : '';
   const detailArtwork = productSymbol(product, 74);
@@ -382,7 +387,7 @@ function authPage(kind) {
   const isLogin = kind === 'login';
   return `<div class="auth-page"><a data-link href="/" class="auth-back">${icon('arrow', 17)} Back to home</a><section class="auth-card"><aside class="auth-brand"><a data-link href="/">${logo('auth-logo')}</a><div><span class="eyebrow light-eyebrow">EMMYJOSH LOGS MARKETPLACE</span><h2>${isLogin ? 'Your trusted<br>digital services hub.' : 'Join the<br>marketplace.'}</h2><p>${isLogin ? 'A clear place to manage your services and account.' : 'Create an account and explore available services.'}</p></div><span class="auth-shield">${icon('shield', 42)}</span></aside><div class="auth-form-wrap"><div class="auth-form-heading"><a data-link href="/">${logo('form-logo')}</a><h1>${isLogin ? 'Welcome back' : 'Create your account'}</h1><p>${isLogin ? 'Sign in to continue to your account.' : 'It’s quick and easy.'}</p></div>${state.authMessage ? `<p class="auth-feedback" role="status">${escapeHTML(state.authMessage)}</p>` : ''}
     <form class="stack-form" data-form="${isLogin ? 'login' : 'register'}">${isLogin ? `<label>Email address or phone<input name="identifier" required autocomplete="username" placeholder="Email, phone, or username"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="current-password" placeholder="Password"></label><div class="form-between"><label class="check-label"><input name="rememberMe" type="checkbox"><span>Remember me</span></label><a data-link class="form-link" href="/support#password">Forgot password?</a></div>` : `<label>Username<input name="username" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]{3,30}" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="3–30 letters, numbers, or underscores"></label><label>Full name<input name="fullName" required autocomplete="name" placeholder="Full name"></label><label>Email address<input name="email" type="email" required autocomplete="email" placeholder="Email address"></label><label>Phone number<input name="phoneNumber" type="tel" required autocomplete="tel" placeholder="Phone number"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="Password"></label><label>Confirm password<input name="confirmPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="Confirm password"></label>`}<button class="button auth-submit" type="submit">${isLogin ? 'Login' : 'Register account'} ${icon('arrow', 17)}</button><p class="auth-feedback" data-feedback></p></form>
-    <div class="auth-divider"><span>or continue with</span></div><div class="social-buttons"><button type="button" class="social-button" data-action="social-login">${googleMark()} Google</button><button type="button" class="social-button" data-action="social-login">${facebookMark()} Facebook</button></div><p class="auth-switch">${isLogin ? 'Don’t have an account?' : 'Already have an account?'} <a data-link href="${isLogin ? '/register' : '/login'}">${isLogin ? 'Register' : 'Login'}</a></p><p class="auth-disclaimer">Preview interface · real authentication requires a configured API.</p></div></section></div><div class="toast-slot" aria-live="polite"></div>`;
+    <div class="auth-divider"><span>or continue with</span></div><div class="social-buttons"><button type="button" class="social-button" data-action="social-login">${googleMark()} Google</button><button type="button" class="social-button" data-action="social-login">${facebookMark()} Facebook</button></div><p class="auth-switch">${isLogin ? 'Don’t have an account?' : 'Already have an account?'} <a data-link href="${isLogin ? '/register' : '/login'}">${isLogin ? 'Register' : 'Login'}</a></p><p class="auth-disclaimer">Preview interface · real sign-in requires a server connection.</p></div></section></div><div class="toast-slot" aria-live="polite"></div>`;
 }
 
 function googleMark() { return '<span class="google-mark" aria-hidden="true">G</span>'; }
@@ -390,10 +395,10 @@ function facebookMark() { return '<span class="facebook-mark" aria-hidden="true"
 
 function walletPage() {
   const balance = state.wallet ? formatAmount(state.wallet.balance) : (getApiBase() ? '—' : formatNaira(12500));
-  const balanceCaption = state.wallet ? 'Balance returned by your wallet API.' : (getApiBase() ? 'Sign in to load a verified wallet balance.' : 'Example balance · preview only');
+  const balanceCaption = state.wallet ? 'Balance from your wallet.' : (getApiBase() ? 'Sign in to load a verified wallet balance.' : 'Example balance · preview only');
   const transactions = state.transactions !== null ? mapTransactions(state.transactions).slice(0, 3) : (getApiBase() ? [] : sampleTransactions.slice(0, 3));
   return accountShell('wallet', `${pageHeading('YOUR MONEY', 'Wallet', 'View your balance and manage supported deposit options.')}
-    <section class="wallet-layout"><div class="wallet-balance-card"><div><span>Wallet balance</span><strong>${balance}</strong><small>${balanceCaption}</small></div><span class="balance-mark">${icon('wallet', 31)}</span></div><article class="panel wallet-fund-card"><div class="panel-head"><div><span class="eyebrow">FUND YOUR WALLET</span><h2>Deposit funds</h2></div><span class="secure-pill">${icon('shield', 15)} Verified transfers</span></div><p>Request a dedicated virtual account after signing in. Transfers are credited only after the payment provider verifies the event.</p><div class="deposit-methods"><div class="deposit-option active">${icon('bank', 21)}<b>Bank transfer</b><small>Provider account</small></div><div class="deposit-option muted">${icon('phone', 21)}<b>USSD</b><small>Availability varies</small></div><div class="deposit-option muted">${icon('wallet', 21)}<b>Card payment</b><small>Not configured</small></div></div>${state.account ? `<div class="account-details"><div class="account-created"><span>${icon('check', 18)} Account details returned by API</span><small>Verify the account and provider instructions before sending funds.</small></div><dl><div><dt>Bank</dt><dd>${escapeHTML(state.account.bankName || '—')}</dd></div><div><dt>Account name</dt><dd>${escapeHTML(state.account.accountName || '—')}</dd></div><div><dt>Account number</dt><dd><strong>${escapeHTML(state.account.accountNumber || '—')}</strong><button class="icon-button" data-action="copy-account" aria-label="Copy account number">${icon('copy', 17)}</button></dd></div></dl></div>` : `<form class="inline-account-form" data-form="virtual-account"><label>Phone number for your dedicated account<input name="phoneNumber" type="tel" required minlength="7" placeholder="e.g. +234 810 123 4567"></label><button class="button" type="submit">Create virtual account ${icon('arrow', 16)}</button></form><p class="muted-caption">This requests an account from the configured backend. No bank details are invented in preview.</p>`}</article></section>
+    <section class="wallet-layout"><div class="wallet-balance-card"><div><span>Wallet balance</span><strong>${balance}</strong><small>${balanceCaption}</small></div><span class="balance-mark">${icon('wallet', 31)}</span></div><article class="panel wallet-fund-card"><div class="panel-head"><div><span class="eyebrow">FUND YOUR WALLET</span><h2>Deposit funds</h2></div><span class="secure-pill">${icon('shield', 15)} Verified transfers</span></div><p>Request a dedicated virtual account after signing in. Transfers are credited only after the payment provider verifies the event.</p><div class="deposit-methods"><div class="deposit-option active">${icon('bank', 21)}<b>Bank transfer</b><small>Provider account</small></div><div class="deposit-option muted">${icon('phone', 21)}<b>USSD</b><small>Availability varies</small></div><div class="deposit-option muted">${icon('wallet', 21)}<b>Card payment</b><small>Not configured</small></div></div>${state.account ? `<div class="account-details"><div class="account-created"><span>${icon('check', 18)} Account details confirmed</span><small>Verify the account and provider instructions before sending funds.</small></div><dl><div><dt>Bank</dt><dd>${escapeHTML(state.account.bankName || '—')}</dd></div><div><dt>Account name</dt><dd>${escapeHTML(state.account.accountName || '—')}</dd></div><div><dt>Account number</dt><dd><strong>${escapeHTML(state.account.accountNumber || '—')}</strong><button class="icon-button" data-action="copy-account" aria-label="Copy account number">${icon('copy', 17)}</button></dd></div></dl></div>` : `<form class="inline-account-form" data-form="virtual-account"><label>Phone number for your dedicated account<input name="phoneNumber" type="tel" required minlength="7" placeholder="e.g. +234 810 123 4567"></label><button class="button" type="submit">Create virtual account ${icon('arrow', 16)}</button></form><p class="muted-caption">This requests an account from the configured backend. No bank details are invented in preview.</p>`}</article></section>
     <section class="panel"><div class="panel-head"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Wallet transactions</h2></div><a data-link class="text-link" href="/transactions">View all ${icon('arrow', 14)}</a></div>${transactionRows(transactions)}${getApiBase() ? '' : `<div class="preview-footnote">${icon('eye', 15)} Example wallet activity only.</div>`}</section>`);
 }
 
@@ -478,7 +483,7 @@ function ordersPage() {
   const visibleOrders = activeFilter === 'All orders' ? mappedOrders : mappedOrders.filter((item) => item.type === activeFilter);
   const categoryMetadataMissing = getApiBase() && mappedOrders.some((item) => item.type === 'Service');
   return accountShell('orders', `${pageHeading('ORDER HISTORY', 'My Orders', 'Track purchases and review their latest server-confirmed status.')}
-    <section class="panel"><div class="panel-head"><div><span class="eyebrow">YOUR PURCHASES</span><h2>Orders and purchase history</h2></div><span class="muted-caption">${visibleOrders.length} shown</span></div><div class="tabs" role="tablist">${filters.map((filter) => `<button class="tab-button ${filter === activeFilter ? 'active' : ''}" role="tab" aria-selected="${filter === activeFilter}" data-action="order-filter" data-filter="${filter}">${filter}</button>`).join('')}</div>${categoryMetadataMissing ? `<p class="muted-caption">The supplied Orders API returns product-name snapshots but not category labels. Category filters can only classify rows when the API provides category data.</p>` : ''}${orderRows(visibleOrders)}${getApiBase() ? '' : `<div class="preview-footnote">${icon('eye', 15)} All rows shown here are example preview data.</div>`}</section>`);
+    <section class="panel"><div class="panel-head"><div><span class="eyebrow">YOUR PURCHASES</span><h2>Orders and purchase history</h2></div><span class="muted-caption">${visibleOrders.length} shown</span></div><div class="tabs" role="tablist">${filters.map((filter) => `<button class="tab-button ${filter === activeFilter ? 'active' : ''}" role="tab" aria-selected="${filter === activeFilter}" data-action="order-filter" data-filter="${filter}">${filter}</button>`).join('')}</div>${categoryMetadataMissing ? `<p class="muted-caption">Your orders list does not include category labels yet, so category filters may not match every order.</p>` : ''}${orderRows(visibleOrders)}${getApiBase() ? '' : `<div class="preview-footnote">${icon('eye', 15)} All rows shown here are example preview data.</div>`}</section>`);
 }
 
 function orderDetailPage(id) {
@@ -507,16 +512,16 @@ function transactionsPage() {
   const txCount = (name) => allRows.filter(txMatchers[name]).length;
   const visibleRows = allRows.filter(txMatchers[txFilter]);
   return accountShell('transactions', `${pageHeading('WALLET LEDGER', 'Transaction history', 'A clear record of wallet credits, purchases, and other account activity.')}
-    <section class="panel"><div class="panel-head"><div><span class="eyebrow">YOUR WALLET</span><h2>Transactions</h2></div><span class="muted-caption">${visibleRows.length} shown</span></div><div class="filter-chips" role="group" aria-label="Filter transactions">${['All', 'Credits', 'Purchases', 'Refunds'].map((name) => `<button type="button" class="chip ${txFilter === name ? 'active' : ''}" aria-pressed="${txFilter === name}" data-action="tx-filter" data-filter="${name}">${name} <span class="chip-count">${txCount(name)}</span></button>`).join('')}</div>${visibleRows.length || txFilter === 'All' ? transactionRows(visibleRows) : `<div class="empty-state"><span>${icon('filter', 24)}</span><b>No ${txFilter.toLowerCase()} yet</b><p>Nothing in your history matches this filter.</p><button class="button button-outline button-small" data-action="tx-filter" data-filter="All">Show all</button></div>`}${getApiBase() ? '' : `<div class="preview-footnote">${icon('eye', 15)} Example ledger only. Confirmed transactions are read from the API.</div>`}</section>`);
+    <section class="panel"><div class="panel-head"><div><span class="eyebrow">YOUR WALLET</span><h2>Transactions</h2></div><span class="muted-caption">${visibleRows.length} shown</span></div><div class="filter-chips" role="group" aria-label="Filter transactions">${['All', 'Credits', 'Purchases', 'Refunds'].map((name) => `<button type="button" class="chip ${txFilter === name ? 'active' : ''}" aria-pressed="${txFilter === name}" data-action="tx-filter" data-filter="${name}">${name} <span class="chip-count">${txCount(name)}</span></button>`).join('')}</div>${visibleRows.length || txFilter === 'All' ? transactionRows(visibleRows) : `<div class="empty-state"><span>${icon('filter', 24)}</span><b>No ${txFilter.toLowerCase()} yet</b><p>Nothing in your history matches this filter.</p><button class="button button-outline button-small" data-action="tx-filter" data-filter="All">Show all</button></div>`}${getApiBase() ? '' : `<div class="preview-footnote">${icon('eye', 15)} Example ledger only. Confirmed transactions are read from the server.</div>`}</section>`);
 }
 
 function profilePage() {
   const user = state.profile || state.user || (!state.signedOut && !getApiBase() ? sampleUser : {});
   return accountShell('profile', `${pageHeading('ACCOUNT SETTINGS', 'Profile & settings', 'Manage your personal details, security, and notification preferences.')}
-    <div class="settings-layout"><aside class="settings-nav"><a class="active" href="#personal">${icon('user', 18)} Personal information</a><a href="#security">${icon('shield', 18)} Security</a><a href="#notifications">${icon('bell', 18)} Notifications</a><a href="#api-settings">${icon('settings', 18)} API connection</a></aside><div class="settings-content"><section class="panel settings-panel" id="personal"><div class="panel-head"><div><span class="eyebrow">YOUR PROFILE</span><h2>Personal information</h2></div><span class="avatar avatar-large">${escapeHTML((user.fullName || 'H').slice(0, 1))}</span></div><form class="stack-form form-two-col" data-form="profile"><label>Full name<input name="fullName" required value="${escapeHTML(user.fullName || '')}"></label><label>Email address<input name="email" type="email" value="${escapeHTML(user.email || '')}" readonly></label><label>Phone number<input name="phoneNumber" type="tel" value="${escapeHTML(user.phoneNumber || '')}"></label><div class="form-end"><button class="button button-small" type="submit">Update profile</button></div></form><p class="preview-footnote">Profile changes are saved only after the API accepts them.</p></section>
+    <div class="settings-layout"><aside class="settings-nav"><a class="active" href="#personal">${icon('user', 18)} Personal information</a><a href="#security">${icon('shield', 18)} Security</a><a href="#notifications">${icon('bell', 18)} Notifications</a><a href="#api-settings">${icon('settings', 18)} Server connection</a></aside><div class="settings-content"><section class="panel settings-panel" id="personal"><div class="panel-head"><div><span class="eyebrow">YOUR PROFILE</span><h2>Personal information</h2></div><span class="avatar avatar-large">${escapeHTML((user.fullName || 'H').slice(0, 1))}</span></div><form class="stack-form form-two-col" data-form="profile"><label>Full name<input name="fullName" required value="${escapeHTML(user.fullName || '')}"></label><label>Email address<input name="email" type="email" value="${escapeHTML(user.email || '')}" readonly></label><label>Phone number<input name="phoneNumber" type="tel" value="${escapeHTML(user.phoneNumber || '')}"></label><div class="form-end"><button class="button button-small" type="submit">Update profile</button></div></form><p class="preview-footnote">Profile changes are saved once the server confirms them.</p></section>
       <section class="panel settings-panel" id="security"><div class="panel-head"><div><span class="eyebrow">ACCOUNT SECURITY</span><h2>Change password</h2></div>${icon('shield', 22, 'panel-head-icon')}</div><form class="stack-form form-two-col" data-form="password"><label>Current password<input name="currentPassword" type="password" required autocomplete="current-password"></label><label>New password<input name="newPassword" type="password" required minlength="8" autocomplete="new-password"></label><div class="form-end"><button class="button button-small" type="submit">Update password</button></div></form></section>
-      <section class="panel settings-panel" id="notifications"><div class="panel-head"><div><span class="eyebrow">PREFERENCES</span><h2>Notifications</h2></div></div><label class="preference-row"><span><b>Account and order updates</b><small>Important changes to orders, wallet and security.</small></span><input type="checkbox" checked disabled aria-label="Account and order updates enabled in prototype"></label><p class="preview-footnote">Preference storage is not yet included in the supplied API.</p></section>
-      <section class="panel settings-panel" id="api-settings"><div class="panel-head"><div><span class="eyebrow">INTEGRATION</span><h2>Connect your API</h2></div><span class="connection-pill ${state.apiConnected ? 'connected' : ''}"><i></i>${state.apiConnected ? 'Reachable' : 'Not connected'}</span></div><p>Enter the API base URL ending in <code>/api/v1</code>. For this single-port setup, use <code>/api/v1</code>. This field is not a secret; do not paste provider keys here.</p><form class="api-config-form" data-form="api-config"><label class="sr-only" for="apiBase">API base URL</label><input id="apiBase" name="apiBase" type="text" placeholder="/api/v1" value="${escapeHTML(getApiBase())}"><button class="button button-small" type="submit">Save API URL</button></form><p class="muted-caption">Same-origin requests use the marketplace server; using the marketplace connection keeps setup simple.</p></section>
+      <section class="panel settings-panel" id="notifications"><div class="panel-head"><div><span class="eyebrow">PREFERENCES</span><h2>Notifications</h2></div></div><label class="preference-row"><span><b>Account and order updates</b><small>Important changes to orders, wallet and security.</small></span><input type="checkbox" checked disabled aria-label="Account and order updates enabled in prototype"></label><p class="preview-footnote">Saving preferences is not available yet.</p></section>
+      <section class="panel settings-panel" id="api-settings"><div class="panel-head"><div><span class="eyebrow">INTEGRATION</span><h2>Connect to the server</h2></div><span class="connection-pill ${state.apiConnected ? 'connected' : ''}"><i></i>${state.apiConnected ? 'Reachable' : 'Not connected'}</span></div><p>Enter the Server address ending in <code>/api/v1</code>. For this single-port setup, use <code>/api/v1</code>. This field is not a secret; do not paste provider keys here.</p><form class="api-config-form" data-form="api-config"><label class="sr-only" for="apiBase">Server address</label><input id="apiBase" name="apiBase" type="text" placeholder="/api/v1" value="${escapeHTML(getApiBase())}"><button class="button button-small" type="submit">Save server address</button></form><p class="muted-caption">Same-origin requests use the marketplace server; using the marketplace connection keeps setup simple.</p></section>
     </div></div>`);
 }
 
@@ -530,7 +535,7 @@ function notificationsPage() {
 }
 
 function supportPage() {
-  return `<div class="site-public">${publicHeader()}<main class="support-page page-wrap">${previewNotice()}<section class="support-hero" id="about"><div><span class="eyebrow">ABOUT EMMYJOSH LOGS</span><h1>Digital services,<br><span>made clearer.</span></h1><p>Emmyjosh Logs Marketplace brings together lawful digital services and account tools in a straightforward experience.</p><a data-link class="button" href="/marketplace">Explore marketplace ${icon('arrow', 17)}</a></div><div class="support-brand-visual">${logo('support-logo')}<span>YOUR TRUSTED LOGS &amp; VIRTUAL NUMBER HUB</span><div class="support-swoosh"></div></div></section><section class="support-content-grid"><article class="panel" id="contact"><div class="panel-head"><div><span class="eyebrow">WE’RE HERE TO HELP</span><h2>Contact support</h2></div>${icon('help', 23, 'panel-head-icon')}</div><p>Send a question or tell us what you need help with. A ticket is only recorded when the support API confirms it.</p><form class="stack-form" data-form="support"><label>Subject<input name="subject" required minlength="3" maxlength="160" placeholder="How can we help?"></label><label>Message<textarea name="body" required minlength="3" maxlength="4000" rows="5" placeholder="Share a few details…"></textarea></label><button class="button" type="submit">Send support request ${icon('arrow', 17)}</button><p class="form-feedback" data-feedback></p></form></article><aside class="policy-panel"><span class="eyebrow">HELPFUL INFORMATION</span><a id="terms" href="#terms">Terms of service <small>Content pending</small><span>›</span></a><a id="privacy" href="#privacy">Privacy policy <small>Content pending</small><span>›</span></a><a id="refunds" href="#refunds">Refund information <small>Content pending</small><span>›</span></a><a id="password" href="#password">Password recovery <small>Not configured</small><span>›</span></a><div class="policy-note">${icon('shield', 18)}<p>Only lawfully sourced products and authorized use are supported. Payment questions are reviewed against verified provider records. Official policy copy has not been provided yet.</p></div></aside></section></main><footer class="public-footer page-wrap"><a data-link href="/">${logo('footer-logo')}</a><p>Emmyjosh Logs Marketplace · Lawful services, clearly presented.</p><div><a data-link href="/admin/login">Admin</a><a data-link href="/support">Support</a><a data-link href="/support#terms">Terms</a><a data-link href="/support#privacy">Privacy</a></div></footer></div><div class="toast-slot" aria-live="polite"></div>`;
+  return `<div class="site-public">${publicHeader()}<main class="support-page page-wrap">${previewNotice()}<section class="support-hero" id="about"><div><span class="eyebrow">ABOUT EMMYJOSH LOGS</span><h1>Digital services,<br><span>made clearer.</span></h1><p>Emmyjosh Logs Marketplace brings together lawful digital services and account tools in a straightforward experience.</p><a data-link class="button" href="/marketplace">Explore marketplace ${icon('arrow', 17)}</a></div><div class="support-brand-visual">${logo('support-logo')}<span>YOUR TRUSTED LOGS &amp; VIRTUAL NUMBER HUB</span><div class="support-swoosh"></div></div></section><section class="support-content-grid"><article class="panel" id="contact"><div class="panel-head"><div><span class="eyebrow">WE’RE HERE TO HELP</span><h2>Contact support</h2></div>${icon('help', 23, 'panel-head-icon')}</div><p>Send a question or tell us what you need help with. A ticket is only recorded when the support team confirms it.</p><form class="stack-form" data-form="support"><label>Subject<input name="subject" required minlength="3" maxlength="160" placeholder="How can we help?"></label><label>Message<textarea name="body" required minlength="3" maxlength="4000" rows="5" placeholder="Share a few details…"></textarea></label><button class="button" type="submit">Send support request ${icon('arrow', 17)}</button><p class="form-feedback" data-feedback></p></form></article><aside class="policy-panel"><span class="eyebrow">HELPFUL INFORMATION</span><a id="terms" href="#terms">Terms of service <small>Content pending</small><span>›</span></a><a id="privacy" href="#privacy">Privacy policy <small>Content pending</small><span>›</span></a><a id="refunds" href="#refunds">Refund information <small>Content pending</small><span>›</span></a><a id="password" href="#password">Password recovery <small>Not configured</small><span>›</span></a><div class="policy-note">${icon('shield', 18)}<p>Only lawfully sourced products and authorized use are supported. Payment questions are reviewed against verified provider records. Official policy copy has not been provided yet.</p></div></aside></section></main><footer class="public-footer page-wrap"><a data-link href="/">${logo('footer-logo')}</a><p>Emmyjosh Logs Marketplace · Lawful services, clearly presented.</p><div><a data-link href="/admin/login">Admin</a><a data-link href="/support">Support</a><a data-link href="/support#terms">Terms</a><a data-link href="/support#privacy">Privacy</a></div></footer></div><div class="toast-slot" aria-live="polite"></div>`;
 }
 
 function adminSidebar(active) {
@@ -597,9 +602,9 @@ function adminDataPanel(section) {
   else if (section === 'inventory') rows = sampleProducts.slice(0, 4).map((x, i) => [`DEMO-STOCK-${100 + i}`, x.name, x.available ? 'Example available' : 'Unavailable', 'Preview data']);
   else if (section === 'virtual-accounts') rows = [['No live accounts', 'PocketFi', 'Not connected', 'NGN']];
   else if (section === 'notifications') rows = sampleNotifications.map((x) => [x.title, 'Example audience', 'Draft preview', x.time]);
-  else if (section === 'support') rows = [['No live tickets', 'Preview customer', 'Waiting for API', '—']];
-  else rows = [['API connection', 'Not configured', 'Preview only', '—'], ['Payment provider', 'PocketFi', 'Contract needs verification', '—']];
-  return `<section class="panel admin-table-panel"><div class="panel-head"><div><span class="eyebrow">${section.toUpperCase().replaceAll('-', ' ')}</span><h2>${headers[0]} and records</h2></div>${section === 'products' ? '<button class="button button-small" data-action="admin-create">' + icon('plus', 16) + ' Add product</button>' : '<button class="button button-outline button-small" data-action="admin-export">' + icon('filter', 16) + ' Filter</button>'}</div><div class="table-wrap"><table class="data-table"><thead><tr>${headers.map((head) => `<th>${escapeHTML(head)}</th>`).join('')}<th></th></tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHTML(cell)}</td>`).join('')}<td><button class="link-button" data-action="admin-review">Review</button></td></tr>`).join('')}</tbody></table></div><div class="preview-footnote">${icon('eye', 15)} Preview records only. Persistence requires an authenticated admin API response.</div></section>`;
+  else if (section === 'support') rows = [['No live tickets', 'Preview customer', 'Waiting for server', '—']];
+  else rows = [['Server connection', 'Not configured', 'Preview only', '—'], ['Payment provider', 'PocketFi', 'Contract needs verification', '—']];
+  return `<section class="panel admin-table-panel"><div class="panel-head"><div><span class="eyebrow">${section.toUpperCase().replaceAll('-', ' ')}</span><h2>${headers[0]} and records</h2></div>${section === 'products' ? '<button class="button button-small" data-action="admin-create">' + icon('plus', 16) + ' Add product</button>' : '<button class="button button-outline button-small" data-action="admin-export">' + icon('filter', 16) + ' Filter</button>'}</div><div class="table-wrap"><table class="data-table"><thead><tr>${headers.map((head) => `<th>${escapeHTML(head)}</th>`).join('')}<th></th></tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHTML(cell)}</td>`).join('')}<td><button class="link-button" data-action="admin-review">Review</button></td></tr>`).join('')}</tbody></table></div><div class="preview-footnote">${icon('eye', 15)} Preview records only. Saving requires a signed-in admin session.</div></section>`;
 }
 
 let adminToolsPromise = null;
@@ -903,7 +908,7 @@ async function loadAccountPage(route) {
       state.loaded = {};
     }
     state.authMessage = [401, 403].includes(error.status)
-      ? 'Your API session is missing or expired. Sign in to view customer data.'
+      ? 'Your session is missing or expired. Sign in to view customer data.'
       : `Could not load account data: ${error.message}`;
     if (window.location.pathname.replace(/\/$/, '') === route) render();
   }
@@ -1052,21 +1057,21 @@ function bindEvents() {
     if (button) { button.disabled = true; button.dataset.originalText = button.textContent; button.textContent = 'Please wait…'; }
     try {
       if (kind === 'login') {
-        if (!getApiBase()) throw new ApiError('Connect the API URL in Profile & settings before using real login.', 0, 'NOT_CONFIGURED');
+        if (!getApiBase()) throw new ApiError('Add the server address in Profile & settings before using real login.', 0, 'NOT_CONFIGURED');
         clearPrivateCaches(); state.user = null; state.signedOut = true;
         await api.login({ identifier: values.identifier, password: values.password, rememberMe: form.rememberMe.checked });
         await refreshSession();
         state.apiConnected = true; state.loaded = {}; state.signedOut = false;
-        toast('Signed in with the configured API.', 'success'); navigate('/dashboard'); return;
+        toast('Signed in successfully.', 'success'); navigate('/dashboard'); return;
       }
       if (kind === 'register') {
         if (values.password !== values.confirmPassword) throw new ApiError('Your passwords do not match.', 422, 'VALIDATION');
-        if (!getApiBase()) throw new ApiError('Connect the API URL in Profile & settings before creating a real account.', 0, 'NOT_CONFIGURED');
+        if (!getApiBase()) throw new ApiError('Add the server address in Profile & settings before creating a real account.', 0, 'NOT_CONFIGURED');
         clearPrivateCaches(); state.user = null; state.signedOut = true;
         await api.register(values);
         await refreshSession();
         state.apiConnected = true; state.loaded = {}; state.signedOut = false;
-        toast('Account created by the API.', 'success'); navigate('/dashboard'); return;
+        toast('Account created successfully.', 'success'); navigate('/dashboard'); return;
       }
       if (kind === 'market-search') {
         const params = new URLSearchParams(); if (values.q?.trim()) params.set('q', values.q.trim());
@@ -1074,30 +1079,30 @@ function bindEvents() {
         navigate(`/marketplace${params.size ? `?${params}` : ''}`); return;
       }
       if (kind === 'virtual-account') {
-        if (!getApiBase()) throw new ApiError('Connect the API before requesting a virtual account.', 0, 'NOT_CONFIGURED');
-        if (!state.user) throw new ApiError('Sign in through the configured API before requesting a virtual account.', 401, 'AUTH_REQUIRED');
-        if (!(await confirmDialog('This will contact the connected API and may request a real virtual bank account from its provider. Continue?'))) return;
+        if (!getApiBase()) throw new ApiError('Connect to the server before requesting a virtual account.', 0, 'NOT_CONFIGURED');
+        if (!state.user) throw new ApiError('Sign in before requesting a virtual account.', 401, 'AUTH_REQUIRED');
+        if (!(await confirmDialog('This will contact the payment provider and may request a real virtual bank account from its provider. Continue?'))) return;
         const result = await api.createVirtualAccount(values.phoneNumber);
         state.account = result.virtualAccount || null; state.apiConnected = true;
-        render(); toast(result.created === false ? 'Existing virtual account returned by the API.' : 'Virtual account details returned by the API.', 'success'); return;
+        render(); toast(result.created === false ? 'Existing virtual account loaded.' : 'Virtual account details loaded.', 'success'); return;
       }
       if (kind === 'profile') {
-        if (!getApiBase() || !state.user) throw new ApiError('Sign in through the configured API before updating your profile.', 401, 'AUTH_REQUIRED');
+        if (!getApiBase() || !state.user) throw new ApiError('Sign in before updating your profile.', 401, 'AUTH_REQUIRED');
         const result = await api.updateProfile({ fullName: values.fullName, phoneNumber: values.phoneNumber });
         state.user = result.user || state.user;
         state.profile = state.user;
-        state.apiConnected = true; render(); toast('Profile updated by the API.', 'success'); return;
+        state.apiConnected = true; render(); toast('Profile updated.', 'success'); return;
       }
       if (kind === 'password') {
-        if (!getApiBase() || !state.user) throw new ApiError('Sign in through the configured API before changing your password.', 401, 'AUTH_REQUIRED');
+        if (!getApiBase() || !state.user) throw new ApiError('Sign in before changing your password.', 401, 'AUTH_REQUIRED');
         await api.updatePassword({ currentPassword: values.currentPassword, newPassword: values.newPassword });
-        state.apiConnected = true; form.reset(); toast('Password updated by the API.', 'success'); return;
+        state.apiConnected = true; form.reset(); toast('Password updated.', 'success'); return;
       }
       if (kind === 'support') {
-        if (!getApiBase() || !state.user) throw new ApiError('Sign in through the configured API before submitting a support ticket.', 401, 'AUTH_REQUIRED');
+        if (!getApiBase() || !state.user) throw new ApiError('Sign in before submitting a support ticket.', 401, 'AUTH_REQUIRED');
         await api.createSupportTicket(values.subject, values.body); state.apiConnected = true;
         state.supportTickets = null; state.loaded['/support'] = false;
-        form.reset(); render(); toast('Support request accepted by the API.', 'success'); return;
+        form.reset(); render(); toast('Support request sent.', 'success'); return;
       }
       if (kind === 'api-config') {
         const configured = setApiBase(values.apiBase);
@@ -1120,7 +1125,7 @@ function bindEvents() {
         state.supportTickets = null;
         state.account = null;
         state.currentProduct = null;
-        if (!configured) { toast('API URL cleared. Preview sample data is available.', 'success'); render(); return; }
+        if (!configured) { toast('Server address cleared. Preview sample data is available.', 'success'); render(); return; }
         try {
           await api.categories(); state.apiConnected = true; state.apiMessage = '';
           try { await refreshSession(); toast('Connection and sign-in confirmed.', 'success'); }
@@ -1178,8 +1183,8 @@ function bindEvents() {
     if (action === 'purchase') {
       const listedProduct = catalogProducts().find(item => String(item.id) === String(control.dataset.product));
       if (String(control.dataset.product || '').startsWith('ejl_') && listedProduct?.checkoutEnabled !== true) return toast('This listing is not currently enabled for checkout. Refresh its price and stock.', 'error');
-      if (!getApiBase()) return toast('Preview mode only. Configure the API to request a real order.', 'error');
-      if (!state.user) return toast('Sign in through the configured API before continuing.', 'error');
+      if (!getApiBase()) return toast('Preview mode only. Connect to the server to place a real order.', 'error');
+      if (!state.user) return toast('Sign in before continuing.', 'error');
       if (state.purchasePending) return toast('A purchase request is already in progress.', 'info');
       const summaryQty = Number(document.querySelector('#quantity')?.value || listedProduct?.minQty || 1);
       const summaryUnit = Number(listedProduct?.price || 0);
@@ -1201,7 +1206,7 @@ function bindEvents() {
         state.apiConnected = true; state.orders = null; state.dashboard = null;
         state.loaded['/orders'] = false; state.loaded['/dashboard'] = false;
         const reference = order.orderReference || order.reference || order.id || 'returned order';
-        toast(`API response for ${reference}: ${order.status || 'status unavailable'}. This does not confirm fulfilment.`, 'success');
+        toast(`Update for ${reference}: ${order.status || 'status unavailable'}. This does not confirm fulfilment.`, 'success');
       } catch (error) { toast(error.message, 'error'); }
       finally {
         state.purchasePending = false;
@@ -1221,7 +1226,7 @@ function bindEvents() {
       try {
         await api.markAllNotificationsRead();
         state.notifications = (state.notifications || []).map((item) => ({ ...item, read: true, isRead: true, readAt: item.readAt || new Date().toISOString() }));
-        state.apiConnected = true; render(); toast('Notifications marked as read by the API.', 'success');
+        state.apiConnected = true; render(); toast('Notifications marked as read.', 'success');
       }
       catch (error) { toast(error.message, 'error'); }
     }
@@ -1231,20 +1236,20 @@ function bindEvents() {
       try {
         await api.markNotificationRead(control.dataset.id);
         state.notifications = (state.notifications || []).map((item) => String(item.id) === String(control.dataset.id) ? { ...item, read: true, isRead: true, readAt: item.readAt || new Date().toISOString() } : item);
-        state.apiConnected = true; render(); toast('Notification updated by the API.', 'success');
+        state.apiConnected = true; render(); toast('Notification updated.', 'success');
       }
       catch (error) { toast(error.message, 'error'); }
     }
-    if (action === 'social-login') toast('Social sign-in is not configured in the supplied API.', 'error');
+    if (action === 'social-login') toast('Social sign-in is not available yet.', 'error');
     if (action === 'retry-products') {
       const url = new URL(window.location.href);
       state.productQueryKey = '';
       void loadProducts(url.searchParams.get('q') || '', url.searchParams.get('category') || '', url.searchParams.get('sort') || 'popular');
     }
-    if (action === 'admin-create' || action === 'admin-export' || action === 'admin-review') toast('Admin actions are preview-only until a role-protected API is connected.', 'error');
-    if (action === 'example-details') toast('This is a sample order. Connect the API to view a real order record.', 'info');
+    if (action === 'admin-create' || action === 'admin-export' || action === 'admin-review') toast('Admin actions are preview-only until a protected admin connection is set up.', 'error');
+    if (action === 'example-details') toast('This is a sample order. Connect to the server to view a real order record.', 'info');
     if (action === 'order-detail') {
-      if (!getApiBase()) return toast('This is an example order. Connect the API to view a real order record.', 'info');
+      if (!getApiBase()) return toast('This is an example order. Connect to the server to view a real order record.', 'info');
       if (!state.user) return toast('Sign in before viewing order details.', 'error');
       navigate(`/orders/${encodeURIComponent(control.dataset.id)}`);
     }
@@ -1275,7 +1280,7 @@ function bindEvents() {
         const order = result.order || result;
         const id = order?.id || order?.orderId || result.orderId;
         state.numberOrder = { ...(order || {}), orderId: id, ...(result.session ? { session: result.session } : {}) };
-        toast('Number order accepted by the API. Fulfilment is not assumed.', 'success');
+        toast('Number order received. Fulfilment is confirmed separately.', 'success');
         if (id) navigate(`/numbers/orders/${encodeURIComponent(id)}`);
       } catch (error) { toast(error.message, 'error'); } });
     }
@@ -1294,7 +1299,7 @@ function bindEvents() {
       if (!id || !(await confirmDialog(`${action === 'number-finish' ? 'Finish' : 'Cancel'} this number order?`, { title: action === 'number-finish' ? 'Finish this order' : 'Cancel this order', confirmLabel: action === 'number-finish' ? 'Finish order' : 'Cancel order', cancelLabel: 'Keep order', tone: action === 'number-finish' ? 'default' : 'danger' }))) return;
       try {
         const result = action === 'number-finish' ? await api.finishNumberOrder(id) : await api.cancelNumberOrder(id);
-        state.numberOrder = result.order || result; render(); toast(`Number order ${action === 'number-finish' ? 'finish' : 'cancel'} request accepted by the API.`, 'success');
+        state.numberOrder = result.order || result; render(); toast(`Number order ${action === 'number-finish' ? 'finish' : 'cancel'} request received.`, 'success');
       } catch (error) { toast(error.message, 'error'); }
     }
     if (action === 'order-filter') {

@@ -49,7 +49,7 @@ export const sampleTransactions = [
 ];
 
 export const sampleNotifications = [
-  { id: 'sample-1', icon: 'bag', title: 'Your example order is ready', body: 'This is preview content. Live order status will come from the API.', time: '2m ago', read: false, tone: 'orange' },
+  { id: 'sample-1', icon: 'bag', title: 'Your example order is ready', body: 'This is preview content. Live order status will come from the server.', time: '2m ago', read: false, tone: 'orange' },
   { id: 'sample-2', icon: 'wallet', title: 'Deposit status example', body: 'No real deposit has been received or credited in preview mode.', time: '5m ago', read: false, tone: 'green' },
   { id: 'sample-3', icon: 'megaphone', title: 'A clearer marketplace', body: 'Product availability and service terms will be shown before checkout.', time: '1h ago', read: true, tone: 'brown' },
 ];

@@ -70,12 +70,12 @@ function normalizeBase(value) {
   }
   let parsed;
   try { parsed = new URL(normalized, window.location.origin); }
-  catch { throw new ApiError('Enter a valid API URL.', 0, 'INVALID_API_URL'); }
+  catch { throw new ApiError('Enter a valid server address.', 0, 'INVALID_API_URL'); }
   const sameOrigin = parsed.origin === window.location.origin;
   if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new ApiError('Use a valid http(s) API base without credentials, query, or hash.', 0, 'INVALID_API_URL');
+    throw new ApiError('Use a valid http(s) address without credentials, query, or hash.', 0, 'INVALID_API_URL');
   }
-  if (!sameOrigin && !/^https?:\/\//i.test(normalized)) throw new ApiError('Use a same-origin API path or an explicit https URL.', 0, 'INVALID_API_URL');
+  if (!sameOrigin && !/^https?:\/\//i.test(normalized)) throw new ApiError('Use a same-site path or a full https address.', 0, 'INVALID_API_URL');
   return normalized;
 }
 
@@ -104,7 +104,7 @@ export function clearIdempotencyKeys() { logicalIdempotency.clear(); }
 
 async function rawRequest(path, options = {}) {
   const base = options.baseOverride || getApiBase();
-  if (!base) throw new ApiError('API URL is not configured.', 0, 'NOT_CONFIGURED');
+  if (!base) throw new ApiError('Server address is not set.', 0, 'NOT_CONFIGURED');
   const headers = new Headers(options.headers || {});
   if (options.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const end = beginLoading(options.loadingLabel || 'Loading verified data…');
@@ -124,7 +124,7 @@ async function rawRequest(path, options = {}) {
       });
     } catch {
       if (generation !== authGeneration) throw new ApiError('The account session changed.', 0, 'SESSION_CHANGED');
-      throw new ApiError('The API did not confirm this request. For a purchase, check Orders or retry the same request—not a new purchase.', 0, 'NETWORK_ERROR');
+      throw new ApiError('The server did not confirm this request. For a purchase, check Orders or retry the same request—not a new purchase.', 0, 'NETWORK_ERROR');
     }
     let payload;
     try { payload = await response.json(); }
@@ -156,7 +156,7 @@ async function csrfToken() {
     pending = rawRequest('/auth/csrf', { loadingLabel: 'Preparing secure request…' })
       .then((result) => {
         const token = result.csrfToken || result.data?.csrfToken;
-        if (!token) throw new ApiError('The API did not provide a CSRF token.', 0, 'CSRF_UNAVAILABLE');
+        if (!token) throw new ApiError('The server did not provide a security token.', 0, 'CSRF_UNAVAILABLE');
         csrfState.token = String(token);
         return csrfState.token;
       })
@@ -239,7 +239,7 @@ export const api = {
   health() {
     const base = getApiBase();
     const root = base.replace(/\/api\/v1\/?$/i, '');
-    return rawRequest('/health', { baseOverride: root || window.location.origin, loadingLabel: 'Checking API…' });
+    return rawRequest('/health', { baseOverride: root || window.location.origin, loadingLabel: 'Checking connection…' });
   },
   csrf() { return csrfToken(); },
   register(data) { return authenticate('/auth/register', data); },
