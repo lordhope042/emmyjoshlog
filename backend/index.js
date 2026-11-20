@@ -1,4 +1,3 @@
-
 'use strict';
 
 const express = require('express');
@@ -287,7 +286,7 @@ async function findRule(db, product) {
   return found[0] || null;
 }
 
-async function pricingFor(db, product, override) {
+async function pricingFor(db, product, override, preloadedRules) {
   // OWN products use the exact selling price entered by the admin.
   // Donmarketplace products continue to use their pricing rules.
   if (product.source === 'OWN' && product.selling_price_minor != null) {
@@ -309,11 +308,14 @@ async function pricingFor(db, product, override) {
   let rule = override;
 
   if (!rule && (product.source === 'OWN' || product.source === 'DONMARKETPLACE')) {
-    const productRules = await rows(
-      db,
-      "SELECT * FROM ej_admin_pricing_rules WHERE scope='PRODUCT' AND scope_key=? LIMIT 1",
-      [product.id],
-    );
+    // preloadedRules (Map of product id -> rule) lets list endpoints skip a query per product.
+    const productRules = preloadedRules
+      ? [preloadedRules.get(product.id)].filter(Boolean)
+      : await rows(
+        db,
+        "SELECT * FROM ej_admin_pricing_rules WHERE scope='PRODUCT' AND scope_key=? LIMIT 1",
+        [product.id],
+      );
 
     rule = productRules[0] || null;
     if (String(rule?.mode || '').toUpperCase() !== 'MANUAL') rule = null;
@@ -466,6 +468,26 @@ async function countStatuses(db, productId) {
   const counts = { AVAILABLE: 0, RESERVED: 0, SOLD: 0, QUARANTINED: 0 };
   for (const row of result) counts[row.status] = Number(row.count);
   return counts;
+}
+
+// One query for every product's PRODUCT-scope pricing rule.
+async function loadProductRules(db) {
+  const result = await rows(db, "SELECT * FROM ej_admin_pricing_rules WHERE scope='PRODUCT'");
+  return new Map(result.map((rule) => [rule.scope_key, rule]));
+}
+
+// One grouped query for every product's own-inventory status counts.
+async function loadStatusCounts(db) {
+  const result = await rows(
+    db,
+    'SELECT product_id, status, COUNT(*) AS count FROM ej_own_inventory_units GROUP BY product_id, status',
+  );
+  const byProduct = new Map();
+  for (const row of result) {
+    if (!byProduct.has(row.product_id)) byProduct.set(row.product_id, { AVAILABLE: 0, RESERVED: 0, SOLD: 0, QUARANTINED: 0 });
+    byProduct.get(row.product_id)[row.status] = Number(row.count);
+  }
+  return byProduct;
 }
 
 function parseImportLine(raw, lineNo) {
@@ -735,7 +757,10 @@ function createAdminRouter(options = {}) {
     }
   }
 
+  const catalogCache = { value: null, at: 0 };
+
   function writeAuth(req, res, next) {
+    catalogCache.value = null; // any admin write may change the public catalog
     jsonWrite(req);
     const supplied = req.get('X-Admin-CSRF');
 
@@ -802,11 +827,12 @@ function createAdminRouter(options = {}) {
         });
       }
 
-      await exec(
+      // Best effort: the page does not need to wait for this write.
+      exec(
         db(),
         'UPDATE ej_admin_sessions SET last_seen_at = CURRENT_TIMESTAMP(3) WHERE token_hash = ?',
         [session.token_hash],
-      );
+      ).catch(() => {});
 
       body.csrfToken = token;
     }
@@ -856,11 +882,6 @@ function createAdminRouter(options = {}) {
 
     await exec(
       db(),
-      'DELETE FROM ej_admin_sessions WHERE expires_at <= CURRENT_TIMESTAMP(3)',
-    );
-
-    await exec(
-      db(),
       `INSERT INTO ej_admin_sessions
        (token_hash, user_id, csrf_hash, expires_at)
        VALUES (?, ?, ?, DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 8 HOUR))`,
@@ -888,6 +909,12 @@ function createAdminRouter(options = {}) {
       user: { id: candidate.id, email: candidate.email, role: 'ADMIN' },
       csrfToken: rawCsrfToken,
     });
+
+    // Housekeeping runs after the response so it never slows sign-in.
+    exec(
+      db(),
+      'DELETE FROM ej_admin_sessions WHERE expires_at <= CURRENT_TIMESTAMP(3)',
+    ).catch(() => {});
   }));
 
   router.post('/logout', auth, writeAuth, use(async (req, res) => {
@@ -950,14 +977,19 @@ function createAdminRouter(options = {}) {
        ORDER BY created_at DESC`,
     );
 
+    const [rules, countsByProduct] = await Promise.all([
+      loadProductRules(db()),
+      loadStatusCounts(db()),
+    ]);
+    const emptyCounts = () => ({ AVAILABLE: 0, RESERVED: 0, SOLD: 0, QUARANTINED: 0 });
     const output = [];
 
     for (const product of products) {
       output.push(
         adminProduct(
           product,
-          await pricingFor(db(), product),
-          await countStatuses(db(), product.id),
+          await pricingFor(db(), product, undefined, rules),
+          countsByProduct.get(product.id) || emptyCounts(),
         ),
       );
     }
@@ -2226,7 +2258,7 @@ function createAdminRouter(options = {}) {
       params.push(String(req.query.status));
     }
 
-    const ownResult = await rows(
+    const [ownResult, supplierResult] = await Promise.all([rows(
       db(),
       `SELECT u.id, u.product_id, p.name AS product_name, p.platform,
               u.status, u.created_at, u.source_ref
@@ -2236,9 +2268,7 @@ function createAdminRouter(options = {}) {
        ORDER BY u.created_at DESC
        LIMIT 1000`,
       params,
-    );
-
-    const supplierResult = await rows(
+    ), rows(
       db(),
       `SELECT u.id, u.product_id, p.name AS product_name, p.platform,
               u.status, u.created_at, u.source_ref
@@ -2251,7 +2281,7 @@ function createAdminRouter(options = {}) {
        ORDER BY u.created_at DESC
        LIMIT 1000`,
       params,
-    );
+    )]);
 
     const result = [...ownResult, ...supplierResult]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -2349,7 +2379,12 @@ function createAdminRouter(options = {}) {
     });
   }));
 
+  // The storefront calls this on every landing/marketplace view. Cache it briefly; any admin write clears it.
   router.get('/catalog', use(async (req, res) => {
+    if (catalogCache.value && Date.now() - catalogCache.at < 10_000) {
+      return res.json(catalogCache.value);
+    }
+
     const products = await rows(
       db(),
       `SELECT p.*, 'OWN' AS source,
@@ -2361,10 +2396,11 @@ function createAdminRouter(options = {}) {
        ORDER BY p.created_at DESC`,
     );
 
+    const rules = await loadProductRules(db());
     const output = [];
 
     for (const product of products) {
-      const pricing = await pricingFor(db(), product);
+      const pricing = await pricingFor(db(), product, undefined, rules);
 
       if (!pricing || pricing.invalid || pricing.retailMinor <= 0) {
         continue;
@@ -2375,7 +2411,9 @@ function createAdminRouter(options = {}) {
       );
     }
 
-    res.json({ products: output });
+    catalogCache.value = { products: output };
+    catalogCache.at = Date.now();
+    res.json(catalogCache.value);
   }));
 
   router.get('/catalog/:id', use(async (req, res) => {

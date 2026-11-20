@@ -205,79 +205,164 @@ function publicHeader() {
 }
 
 const LANDING_CSS = `
-.lp{--lp-ink:#22110a;--lp-ink2:#4a2a18;--lp-orange:#e8650a;--lp-amber:#ffb45e;--lp-paper:#fffdf9;--lp-line:#ecdcc8;--lp-muted:#7b6552;color:var(--lp-ink)}
-.lp a:focus-visible,.lp button:focus-visible{outline:3px solid var(--lp-orange);outline-offset:3px;border-radius:10px}
-.lp-wrap{max-width:1180px;margin:0 auto;padding:0 24px}
-.lp-hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:56px;align-items:center;padding:72px 0 64px}
-.lp-hero h1{font-size:clamp(2.5rem,5.2vw,4.4rem);line-height:1.02;letter-spacing:-.035em;font-weight:800;margin:0 0 22px;max-width:13em}
-.lp-lead{font-size:1.125rem;line-height:1.6;color:var(--lp-muted);max-width:46ch;margin:0 0 34px}
-.lp-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.lp-btn{display:inline-flex;align-items:center;gap:10px;padding:15px 26px;border-radius:14px;font-weight:700;text-decoration:none;background:var(--lp-orange);color:#fff;box-shadow:0 14px 30px -14px rgba(232,101,10,.8);transition:transform .15s ease,box-shadow .15s ease}
-.lp-btn:hover{transform:translateY(-2px);box-shadow:0 18px 34px -14px rgba(232,101,10,.9)}
-.lp-btn-quiet{background:transparent;color:var(--lp-ink);border:1.5px solid var(--lp-line);box-shadow:none}
-.lp-btn-quiet:hover{border-color:var(--lp-ink);box-shadow:none}
-.lp-fineprint{margin:22px 0 0;font-size:.875rem;color:var(--lp-muted)}
-.lp-stage{position:relative;min-height:460px}
-.lp-order{position:absolute;right:0;top:8px;width:min(390px,100%);background:linear-gradient(160deg,#2f180d,#190b05);color:#fff;border-radius:34px;padding:28px;box-shadow:0 44px 90px -34px rgba(40,16,4,.65)}
-.lp-order-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:26px}
-.lp-tag{display:inline-block;padding:5px 11px;border-radius:999px;font-size:.75rem;font-weight:700;background:rgba(255,180,94,.16);color:var(--lp-amber)}
-.lp-status{display:grid;font-size:.8125rem;font-weight:600;color:#e9d3bf}
-.lp-status span{grid-area:1/1;text-align:right}
-.lp-got{opacity:0;color:#8fe0a8;animation:lp-in .5s 2.4s forwards}
-.lp-wait{animation:lp-out .4s 2.3s forwards}
-.lp-number{font-size:1.75rem;font-weight:700;letter-spacing:.02em;font-variant-numeric:tabular-nums;margin:0 0 6px}
-.lp-meta{margin:0 0 24px;color:#cdb39c;font-size:.9rem}
-.lp-sms{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:18px 20px;opacity:0;transform:translateY(10px);animation:lp-in .7s 2.6s forwards}
-.lp-sms p{margin:0 0 10px;color:#e9d3bf;font-size:.9rem}
-.lp-code{display:block;font-size:2rem;font-weight:800;letter-spacing:.18em;color:var(--lp-amber);font-variant-numeric:tabular-nums}
-.lp-wallet{position:absolute;left:0;bottom:6px;width:252px;background:var(--lp-paper);border:1px solid var(--lp-line);border-radius:22px;padding:18px 20px;box-shadow:0 26px 54px -26px rgba(90,40,10,.4)}
-.lp-wallet small{display:block;color:var(--lp-muted);font-size:.8125rem;margin:10px 0 2px}
-.lp-wallet strong{display:block;font-size:1.6rem;letter-spacing:-.02em}
-.lp-wallet span.lp-ok{display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:.8125rem;font-weight:600;color:#1d7a46}
-.lp-wallet .lp-tag{background:rgba(232,101,10,.12);color:var(--lp-orange)}
-.lp-platforms{display:flex;flex-wrap:wrap;align-items:center;gap:14px 30px;padding:22px 0;border-top:1px solid var(--lp-line);border-bottom:1px solid var(--lp-line)}
-.lp-platforms>span{color:var(--lp-muted);font-weight:600}
-.lp-platforms a{display:inline-flex;align-items:center;gap:10px;color:var(--lp-ink);font-weight:700;text-decoration:none;transition:color .15s ease}
-.lp-platforms a:hover{color:var(--lp-orange)}
-.lp-platforms img{width:22px;height:22px}
-.lp-cats{display:grid;grid-template-columns:1.15fr .85fr;gap:20px;margin-top:72px}
-.lp-cat{display:flex;flex-direction:column;justify-content:space-between;gap:48px;min-height:310px;padding:40px;text-decoration:none;color:#fff}
-.lp-cat-logs{border-radius:38px;background:linear-gradient(160deg,#2f180d,#190b05)}
-.lp-cat-num{border-radius:26px;background:var(--lp-orange)}
-.lp-cat-icon{display:grid;place-items:center;width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.14)}
-.lp-cat h2{margin:0 0 10px;font-size:1.75rem;letter-spacing:-.02em}
-.lp-cat p{margin:0;max-width:40ch;line-height:1.55;color:rgba(255,255,255,.78)}
-.lp-cat-go{display:inline-flex;align-items:center;gap:8px;font-weight:700;margin-top:22px}
-.lp-cat:hover .lp-cat-go{text-decoration:underline;text-underline-offset:4px}
+.lp{--ink:#17110d;--muted:#8a7e74;--o:#e8650a;--o2:#ff9a4d;--tint1:#fff1e3;--tint2:#ffe5cd;--line:#f0e3d4;--paper:#fffdf9;background:#fff;color:var(--ink);overflow-x:clip}
+.lp a:focus-visible,.lp button:focus-visible{outline:3px solid var(--o);outline-offset:3px;border-radius:12px}
+.lp-wrap{max-width:1200px;margin:0 auto;padding:0 24px}
+
+/* hero */
+.lp-hero{display:grid;grid-template-columns:1fr 1fr;min-height:700px}
+.lp-hero-copy{background:#faf5ee;display:flex;flex-direction:column;justify-content:center;padding:96px 48px 96px max(24px,calc((100vw - 1200px) / 2 + 24px))}
+.lp-h1{margin:0 0 26px;font-size:clamp(2.6rem,5vw,4.6rem);line-height:1.04;letter-spacing:-.04em;font-weight:500;max-width:11em}
+.lp-h1 .lp-muted{color:var(--muted)}
+.lp-lead{font-size:1.125rem;line-height:1.6;max-width:34em;margin:0 0 34px}
+.lp-actions{display:flex;flex-wrap:wrap;gap:12px}
+.lp-pill{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border-radius:999px;font-weight:600;text-decoration:none;background:var(--ink);color:#fff;border:1.5px solid var(--ink);transition:transform .2s ease,background .2s ease,color .2s ease}
+.lp-pill:hover{transform:translateY(-2px)}
+.lp-pill-line{background:transparent;color:var(--ink)}
+.lp-pill-line:hover{background:var(--ink);color:#fff}
+.lp-pill-o{background:var(--o);border-color:var(--o)}
+.lp-fine{margin:22px 0 0;font-size:.875rem;color:var(--muted)}
+
+.lp-hero-art{position:relative;overflow:hidden;min-height:700px;background:linear-gradient(135deg,#ffb067 0%,#f47a1f 38%,#d9560a 72%,#a93f05 100%)}
+.lp-hero-art::before,.lp-hero-art::after{content:"";position:absolute;border-radius:50%;filter:blur(60px);pointer-events:none}
+.lp-hero-art::before{width:520px;height:520px;left:-120px;top:-140px;background:rgba(255,255,255,.5);animation:lp-drift 14s ease-in-out infinite alternate}
+.lp-hero-art::after{width:560px;height:560px;right:-160px;bottom:-200px;background:rgba(110,26,0,.55);animation:lp-drift 17s ease-in-out infinite alternate-reverse}
+.lp-layer{position:absolute;transform:translate3d(calc(var(--px,0) * var(--depth) * 1px),calc(var(--py,0) * var(--depth) * 1px),0);transition:transform .3s ease-out;z-index:1}
+.lp-float{animation:lp-floatY 7s ease-in-out infinite}
+.lp-float-b{animation-duration:9s;animation-delay:-3s}
+.lp-win{width:620px;background:#fff;border-radius:16px;box-shadow:0 40px 90px -30px rgba(70,20,0,.6);overflow:hidden;font-size:11px;color:#2a1c12}
+.lp-win-bar{display:flex;align-items:center;gap:6px;padding:10px 14px;background:#f6efe7}
+.lp-win-bar i{width:8px;height:8px;border-radius:50%;background:#e1cfbd}
+.lp-win-bar span{margin-left:14px;flex:1;background:#fff;border-radius:999px;padding:4px 12px;color:#9a8878;font-size:10px;text-align:center}
+.lp-win-body{display:grid;grid-template-columns:120px 1fr;min-height:360px}
+.lp-win-side{padding:18px 14px;border-right:1px solid #f1e6da;display:flex;flex-direction:column;gap:12px;color:#9a8878}
+.lp-win-side b{color:#2a1c12;background:#fff1e3;border-radius:8px;padding:7px 9px}
+.lp-win-main{padding:18px}
+.lp-win-main h4{margin:0 0 12px;font-size:14px}
+.lp-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.lp-stats>div{border:1px solid #f1e6da;border-radius:10px;padding:10px 12px}
+.lp-stats small,.lp-chart-card small{display:block;color:#9a8878;margin-bottom:4px}
+.lp-stats strong{font-size:18px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.lp-stats em{font-style:normal;color:#1d7a46;margin-left:6px;font-size:10px}
+.lp-chart-card{border:1px solid #f1e6da;border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.lp-bars{display:flex;align-items:flex-end;gap:5px;height:84px}
+.lp-bars i{flex:1;height:var(--h);border-radius:3px 3px 0 0;background:linear-gradient(180deg,#ffb067,#e8650a);transform-origin:bottom}
+.lp-split{display:flex;align-items:center;gap:18px;border:1px solid #f1e6da;border-radius:10px;padding:12px}
+.lp-donut{flex:none;width:76px;height:76px;border-radius:50%;background:conic-gradient(#e8650a 0 58%,#ffb067 58% 86%,#ffe0c2 86% 100%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 14px),#000 calc(100% - 13px));mask:radial-gradient(farthest-side,transparent calc(100% - 14px),#000 calc(100% - 13px));animation:lp-donut 1.6s cubic-bezier(.2,.8,.2,1) both}
+.lp-rows{flex:1;display:grid;gap:8px}
+.lp-rows div{display:flex;justify-content:space-between;gap:10px}
+.lp-rows i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:7px}
+.lp-phone{width:226px;padding:8px;border-radius:38px;background:rgba(255,255,255,.35);border:1px solid rgba(255,255,255,.6);box-shadow:0 40px 80px -30px rgba(70,20,0,.65);backdrop-filter:blur(10px)}
+.lp-phone-screen{background:#fff;border-radius:31px;padding:16px 14px 14px;height:440px;color:#2a1c12;font-size:11px}
+.lp-ph-top{display:flex;justify-content:space-between;font-weight:600;font-size:10px;margin-bottom:22px}
+.lp-ph-title{text-align:center;font-weight:600;margin:0 0 18px}
+.lp-ph-amount{height:50px;text-align:center;font-size:36px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;display:flex;justify-content:center;align-items:center}
+.lp-type{display:inline-block;overflow:hidden;white-space:nowrap;width:6ch;border-right:3px solid var(--o);animation:lp-typing 6s steps(6) infinite,lp-caret .8s step-end infinite}
+.lp-ph-chips{display:flex;justify-content:center;gap:6px;margin:6px 0 16px}
+.lp-ph-chips span{padding:4px 8px;border-radius:6px;background:#f6efe7;font-size:10px;font-weight:600}
+.lp-ph-pay{text-align:center;color:var(--o);font-weight:600;margin:0 0 10px}
+.lp-ph-btn{text-align:center;padding:9px;border-radius:8px;background:var(--o);color:#fff;font-weight:600;margin-bottom:10px;animation:lp-press 6s ease-in-out infinite}
+.lp-keys{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.lp-keys span{height:27px;border-radius:5px;background:#faf5ee;display:grid;place-items:center;font-size:12px;font-weight:500}
+.lp-example{position:absolute;left:24px;bottom:22px;z-index:2;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;font-size:12px;font-weight:600;backdrop-filter:blur(8px)}
+
+/* marquee */
+.lp-marquee{overflow:hidden;padding:34px 0;-webkit-mask:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.lp-track{display:flex;width:max-content;animation:lp-marq 34s linear infinite}
+.lp-marquee:hover .lp-track{animation-play-state:paused}
+.lp-track a{display:inline-flex;align-items:center;gap:12px;margin:0 38px;font-size:1.25rem;font-weight:700;color:var(--ink);text-decoration:none;opacity:.8;transition:opacity .2s ease,color .2s ease}
+.lp-track a:hover{opacity:1;color:var(--o)}
+.lp-track img{width:28px;height:28px}
+
+/* sections */
+.lp-title{margin:72px 0 44px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.1;letter-spacing:-.035em;font-weight:500;max-width:16em}
+.lp-title span{color:var(--muted)}
+.lp-bento{display:grid;grid-template-columns:repeat(12,1fr);gap:24px}
+.lp-card{position:relative;overflow:hidden;border-radius:22px;background:linear-gradient(160deg,var(--tint1),var(--tint2));padding:32px;min-height:460px;display:flex;flex-direction:column;text-decoration:none;color:var(--ink);transition:transform .35s ease,box-shadow .35s ease}
+.lp-card:hover{transform:translateY(-4px);box-shadow:0 30px 60px -34px rgba(120,50,0,.45)}
+.lp-card h3{margin:0 0 8px;font-size:1.5rem;letter-spacing:-.02em;font-weight:500;max-width:14em}
+.lp-card p{margin:0;color:#6e6055;line-height:1.55;max-width:34em}
+.lp-card-vis{flex:1;display:grid;place-items:center;margin-top:24px;min-height:0}
+.lp-c7{grid-column:span 7}.lp-c5{grid-column:span 5}
+.lp-orbit{position:relative;width:360px;height:360px}
+.lp-ring{position:absolute;border-radius:50%;border:1.5px dashed rgba(232,101,10,.3)}
+.lp-ring.r1{inset:0}.lp-ring.r2{inset:60px}.lp-ring.r3{inset:120px}
+.lp-spin{position:absolute;inset:0;animation:lp-rot 30s linear infinite}
+.lp-sat{position:absolute;top:50%;left:50%;width:48px;height:48px;margin:-24px 0 0 -24px;transform:rotate(calc(var(--a) * 1deg)) translateY(-150px) rotate(calc(var(--a) * -1deg))}
+.lp-sat>span{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;background:#fff;box-shadow:0 10px 24px -10px rgba(120,50,0,.5);animation:lp-rot 30s linear infinite reverse}
+.lp-sat img{width:24px;height:24px}
+.lp-core{position:absolute;inset:132px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#ffa254,#e8650a);box-shadow:0 0 0 14px rgba(232,101,10,.12),0 20px 40px -14px rgba(232,101,10,.7);animation:lp-pulse 3.2s ease-in-out infinite}
+.lp-mini{width:min(300px,100%);background:#fff;border-radius:18px;padding:18px;box-shadow:0 26px 50px -28px rgba(120,50,0,.5)}
+.lp-mini-top{display:flex;justify-content:space-between;align-items:center;font-size:.85rem;margin-bottom:12px}
+.lp-mini-top .lp-tg{display:grid}
+.lp-mini-top .lp-tg span{grid-area:1/1;text-align:right;font-weight:600}
+.lp-s-wait{color:var(--muted);animation:lp-wait 7s infinite}
+.lp-s-got{color:#1d7a46;opacity:0;animation:lp-got 7s infinite}
+.lp-mini-num{margin:0 0 14px;font-size:1.35rem;font-weight:700;font-variant-numeric:tabular-nums}
+.lp-mini-sms{background:#faf5ee;border-radius:12px;padding:12px 14px;animation:lp-smsin 7s infinite}
+.lp-mini-sms small{display:block;color:var(--muted);margin-bottom:4px}
+.lp-mini-sms strong{font-size:1.6rem;letter-spacing:.16em;color:var(--o);font-variant-numeric:tabular-nums}
+.lp-mini .lp-bars{height:92px;margin-top:12px}
+.lp-mini .lp-big{display:block;font-size:1.7rem;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.lp-ok{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:.8rem;font-weight:600;color:#1d7a46}
+.lp-vault{width:min(440px,100%);background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 26px 50px -28px rgba(120,50,0,.5)}
+.lp-vault-bar{display:flex;gap:6px;padding:11px 14px;background:#f6efe7}
+.lp-vault-bar i{width:8px;height:8px;border-radius:50%;background:#e1cfbd}
+.lp-vault-body{padding:18px}
+.lp-vault-body b{display:block;margin-bottom:12px}
+.lp-secret{background:#faf5ee;border-radius:12px;padding:14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;line-height:1.8;animation:lp-unblur 7s infinite}
+.lp-reveal-btn{margin-top:14px;display:inline-flex;gap:8px;align-items:center;padding:9px 16px;border-radius:999px;background:var(--ink);color:#fff;font-weight:600;font-size:.85rem;animation:lp-press 7s ease-in-out infinite}
+
+/* featured + closing */
+.lp-featured{margin-top:96px}
 .lp-head{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:28px}
-.lp-h2{margin:0;font-size:clamp(1.8rem,3.2vw,2.6rem);letter-spacing:-.025em;line-height:1.1;font-weight:800;max-width:18em}
-.lp-link{color:var(--lp-orange);font-weight:700;text-decoration:none;white-space:nowrap}
+.lp-head h2{margin:0;font-size:clamp(1.8rem,3.2vw,2.6rem);letter-spacing:-.03em;font-weight:500}
+.lp-link{color:var(--o);font-weight:700;text-decoration:none;display:inline-flex;gap:6px;align-items:center}
 .lp-link:hover{text-decoration:underline;text-underline-offset:4px}
-.lp-how{margin-top:88px}
-.lp-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin:0;padding:0;list-style:none}
-.lp-steps li{border-top:2px solid var(--lp-ink);padding-top:20px}
-.lp-steps b{display:block;font-size:2.6rem;line-height:1;font-weight:800;color:var(--lp-orange);margin-bottom:14px}
-.lp-steps h3{margin:0 0 8px;font-size:1.2rem}
-.lp-steps p{margin:0;color:var(--lp-muted);line-height:1.6;max-width:36ch}
-.lp-featured{margin-top:88px}
-.lp-close{display:flex;justify-content:space-between;align-items:center;gap:32px;margin:88px 0 72px;padding:46px 50px;border-radius:32px;background:var(--lp-paper);border:1px solid var(--lp-line)}
-.lp-close p{margin:10px 0 0;color:var(--lp-muted);max-width:44ch;line-height:1.55}
-@keyframes lp-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@keyframes lp-out{to{opacity:0}}
-@media (max-width:960px){
-  .lp-hero{grid-template-columns:1fr;gap:40px;padding:44px 0 44px}
-  .lp-stage{min-height:0}
-  .lp-order,.lp-wallet{position:relative;right:auto;top:auto;left:auto;bottom:auto}
-  .lp-wallet{margin:-28px 0 0 14px}
-  .lp-cats,.lp-steps{grid-template-columns:1fr}
-  .lp-cat{min-height:240px;padding:30px}
-  .lp-close{flex-direction:column;align-items:flex-start;padding:34px 28px}
+.lp-close{position:relative;overflow:hidden;margin:96px 0 80px;padding:64px 56px;border-radius:28px;background:#1c0f08;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:32px}
+.lp-close::before{content:"";position:absolute;width:520px;height:520px;right:-140px;top:-220px;border-radius:50%;background:radial-gradient(circle,rgba(255,138,61,.75),transparent 65%);animation:lp-drift 12s ease-in-out infinite alternate}
+.lp-close>*{position:relative}
+.lp-close h2{margin:0 0 10px;font-size:clamp(1.8rem,3.4vw,2.8rem);letter-spacing:-.03em;font-weight:500;max-width:14em}
+.lp-close p{margin:0;color:#d9c3b0;max-width:40ch;line-height:1.55}
+
+/* motion: only when JS marks the page and the visitor has not asked for less motion */
+.lp-anim .lp-rv{opacity:0;transform:translateY(28px);transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1);transition-delay:var(--d,0ms)}
+.lp-anim .lp-rv.is-in,.lp-anim.lp-seen .lp-rv{opacity:1;transform:none}
+.lp-anim.lp-seen .lp-rv{transition:none}
+.lp-anim .lp-bars i{transform:scaleY(0)}
+.lp-anim .lp-hero-art .lp-bars i,.lp-anim .is-in .lp-bars i{animation:lp-grow 1.1s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:calc(var(--i) * 55ms + 250ms)}
+.lp-anim.lp-seen .lp-bars i{animation:none;transform:none}
+
+@keyframes lp-floatY{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@keyframes lp-drift{from{transform:translate(0,0) scale(1)}to{transform:translate(60px,40px) scale(1.12)}}
+@keyframes lp-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes lp-donut{from{transform:rotate(-120deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes lp-typing{0%{width:0}30%,82%{width:6ch}100%{width:0}}
+@keyframes lp-caret{50%{border-color:transparent}}
+@keyframes lp-press{0%,30%,100%{transform:scale(1)}36%{transform:scale(.95)}42%{transform:scale(1)}}
+@keyframes lp-marq{to{transform:translateX(-50%)}}
+@keyframes lp-rot{to{transform:rotate(360deg)}}
+@keyframes lp-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+@keyframes lp-wait{0%,38%{opacity:1}44%,100%{opacity:0}}
+@keyframes lp-got{0%,42%{opacity:0}48%,92%{opacity:1}100%{opacity:0}}
+@keyframes lp-smsin{0%,42%{opacity:.25;transform:scale(.98)}50%,92%{opacity:1;transform:none}100%{opacity:.25;transform:scale(.98)}}
+@keyframes lp-unblur{0%,34%{filter:blur(7px)}44%,90%{filter:blur(0)}100%{filter:blur(7px)}}
+
+@media (max-width:1000px){
+  .lp-hero{grid-template-columns:1fr}
+  .lp-hero-copy{padding:56px 24px 48px}
+  .lp-hero-art{min-height:560px}
+  .lp-win{display:none}
+  .lp-phone-layer{left:50%!important;margin-left:-113px}
+  .lp-c7,.lp-c5{grid-column:span 12}
+  .lp-card{min-height:420px;padding:26px}
+  .lp-orbit{transform:scale(.8)}
+  .lp-close{flex-direction:column;align-items:flex-start;padding:40px 28px}
   .lp-head{flex-direction:column;align-items:flex-start}
 }
 @media (prefers-reduced-motion:reduce){
-  .lp *{animation:none!important;transition:none!important}
-  .lp-wait{opacity:0}
-  .lp-got,.lp-sms{opacity:1;transform:none}
+  .lp *,.lp *::before,.lp *::after{animation:none!important;transition:none!important}
+  .lp-track{flex-wrap:wrap;width:auto}
 }
 `;
 
@@ -289,54 +374,120 @@ function ensureLandingStyles() {
   document.head.appendChild(style);
 }
 
+let landingAnimated = false;
+
+function countUp(el) {
+  if (el.dataset.done) return;
+  el.dataset.done = '1';
+  const target = Number(el.dataset.count);
+  if (!Number.isFinite(target)) return;
+  const decimals = Number(el.dataset.decimals || 0);
+  const prefix = el.dataset.prefix || '';
+  const format = (value) => `${prefix}${value.toLocaleString('en-NG', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+  const duration = 1500;
+  const begin = performance.now();
+  const tick = (now) => {
+    const t = Math.min(1, (now - begin) / duration);
+    el.textContent = format(target * (1 - Math.pow(1 - t, 3)));
+    if (t < 1 && el.isConnected) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function initLanding() {
+  const root = app.querySelector('.lp');
+  if (!root) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const seen = landingAnimated;
+  landingAnimated = true;
+  root.classList.add('lp-anim');
+  if (seen) root.classList.add('lp-seen');
+
+  if (!seen && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target;
+        el.classList.add('is-in');
+        if (el.dataset.count) countUp(el);
+        el.querySelectorAll('[data-count]').forEach(countUp);
+        io.unobserve(el);
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -6% 0px' });
+    root.querySelectorAll('.lp-rv, [data-count]').forEach((el) => io.observe(el));
+  } else {
+    root.querySelectorAll('.lp-rv').forEach((el) => el.classList.add('is-in'));
+  }
+
+  // Gentle pointer parallax on the hero artwork (desktop pointers only).
+  const art = root.querySelector('.lp-hero-art');
+  if (art && window.matchMedia('(hover: hover)').matches) {
+    let frame = 0;
+    art.addEventListener('mousemove', (event) => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const box = art.getBoundingClientRect();
+        art.style.setProperty('--px', (((event.clientX - box.left) / box.width) - 0.5).toFixed(3));
+        art.style.setProperty('--py', (((event.clientY - box.top) / box.height) - 0.5).toFixed(3));
+      });
+    });
+    art.addEventListener('mouseleave', () => { art.style.setProperty('--px', 0); art.style.setProperty('--py', 0); });
+  }
+}
+
 function landingPage() {
   ensureLandingStyles();
   const featured = catalogProducts().slice(0, 3);
   const platforms = ['Instagram', 'TikTok', 'Facebook', 'X', 'Telegram', 'YouTube'];
+  const heights = [18, 24, 20, 28, 34, 30, 40, 36, 44, 52, 48, 58, 50, 62, 70, 64, 78, 72, 88, 80, 96, 100];
+  const bars = (list) => list.map((h, i) => `<i style="--h:${h}%;--i:${i}"></i>`).join('');
+  const marqueeSet = (hidden) => platforms.map((name) => `<a data-link href="/marketplace?category=logs&platform=${encodeURIComponent(name)}" ${hidden ? 'aria-hidden="true" tabindex="-1"' : ''}><img src="/assets/social/${name.toLowerCase()}.svg" alt="" width="28" height="28">${name}</a>`).join('');
   return `<div class="site-public lp">${publicHeader()}
-    <main class="lp-wrap">
-      <section class="lp-hero">
-        <div>
-          <h1>Logs and virtual numbers, paid from one Naira wallet.</h1>
-          <p class="lp-lead">Fund your wallet by bank transfer, choose a log or a virtual number, and collect your delivery from your orders page.</p>
-          <div class="lp-actions">
-            <a class="lp-btn" data-link href="/marketplace">Browse the marketplace ${icon('arrow', 18)}</a>
-            ${state.user ? '<a class="lp-btn lp-btn-quiet" data-link href="/dashboard">Open dashboard</a>' : '<a class="lp-btn lp-btn-quiet" data-link href="/register">Create an account</a>'}
-          </div>
-          <p class="lp-fineprint">Listings are for lawful, authorised use only.</p>
+    <section class="lp-hero">
+      <div class="lp-hero-copy">
+        <h1 class="lp-h1 lp-rv">Buy logs and virtual numbers <span class="lp-muted">from one Naira wallet</span></h1>
+        <p class="lp-lead lp-rv" style="--d:120ms">Fund your wallet by bank transfer, pick a log or a virtual number, and collect your delivery from your orders page.</p>
+        <div class="lp-actions lp-rv" style="--d:220ms">
+          <a class="lp-pill" data-link href="${state.user ? '/dashboard' : '/register'}">${state.user ? 'Open dashboard' : 'Get started'}</a>
+          <a class="lp-pill lp-pill-line" data-link href="/marketplace">Browse marketplace</a>
         </div>
-        <div class="lp-stage" aria-hidden="true">
-          <div class="lp-order">
-            <div class="lp-order-top"><span class="lp-tag">Example order</span><span class="lp-status"><span class="lp-wait">Waiting for SMS…</span><span class="lp-got">SMS received</span></span></div>
-            <p class="lp-number">+1 (•••) •••-4821</p>
-            <p class="lp-meta">Telegram · virtual number</p>
-            <div class="lp-sms"><p>Your verification code is</p><span class="lp-code">482 913</span></div>
-          </div>
-          <div class="lp-wallet"><span class="lp-tag">Example</span><small>Wallet funded</small><strong>₦5,000.00</strong><span class="lp-ok">${icon('check', 15)} Bank transfer verified</span></div>
-        </div>
+      </div>
+      ${heroArt()}
+    </section>
+
+    <nav class="lp-marquee" aria-label="Log platforms"><div class="lp-track">${marqueeSet(false)}${marqueeSet(true)}</div></nav>
+
+    <div class="lp-wrap">
+      <h2 class="lp-title lp-rv">Everything you need to buy digital services <span>from a wallet you control</span></h2>
+      <section class="lp-bento" aria-label="What you can do">
+        <a class="lp-card lp-c7 lp-rv" data-link href="/marketplace?category=logs">
+          <h3>Browse logs for every platform</h3>
+          <p>Log products for Instagram, TikTok, Facebook, X, Telegram and YouTube, with details and stock shown before you buy.</p>
+          <div class="lp-card-vis"><div class="lp-orbit" aria-hidden="true"><i class="lp-ring r1"></i><i class="lp-ring r2"></i><i class="lp-ring r3"></i><div class="lp-spin">${platforms.map((name, i) => `<span class="lp-sat" style="--a:${i * 60}"><span><img src="/assets/social/${name.toLowerCase()}.svg" alt="" width="24" height="24"></span></span>`).join('')}</div><div class="lp-core">${icon('file', 34)}</div></div></div>
+        </a>
+        <a class="lp-card lp-c5 lp-rv" style="--d:120ms" data-link href="/marketplace?category=virtual-numbers">
+          <h3>Get verification codes on virtual numbers</h3>
+          <p>Compare live quotes from two providers, pick a country and service, and receive the SMS in your order.</p>
+          <div class="lp-card-vis"><div class="lp-mini" aria-hidden="true"><div class="lp-mini-top"><b>Virtual number</b><span class="lp-tg"><span class="lp-s-wait">Waiting for SMS…</span><span class="lp-s-got">SMS received</span></span></div><p class="lp-mini-num">+1 (•••) •••-4821</p><div class="lp-mini-sms"><small>Your verification code is</small><strong>482 913</strong></div></div></div>
+        </a>
+        <a class="lp-card lp-c5 lp-rv" data-link href="${state.user ? '/wallet' : '/register'}">
+          <h3>Fund with a bank transfer</h3>
+          <p>Request a dedicated account. Your wallet is credited after the payment provider verifies the transfer.</p>
+          <div class="lp-card-vis"><div class="lp-mini" aria-hidden="true"><small style="color:var(--muted)">Wallet balance</small><strong class="lp-big" data-count="48250" data-decimals="2" data-prefix="₦">₦48,250.00</strong><div class="lp-bars">${bars(heights.slice(6))}</div><span class="lp-ok">${icon('check', 14)} Bank transfer verified</span></div></div>
+        </a>
+        <a class="lp-card lp-c7 lp-rv" style="--d:120ms" data-link href="${state.user ? '/orders' : '/register'}">
+          <h3>Collect your delivery privately</h3>
+          <p>Open your order to reveal what you bought in a secure window. Only the signed-in owner can see it.</p>
+          <div class="lp-card-vis"><div class="lp-vault" aria-hidden="true"><div class="lp-vault-bar"><i></i><i></i><i></i></div><div class="lp-vault-body"><b>Your purchased logs</b><div class="lp-secret">Username: sample_account<br>Password: ••••••••••<br>Recovery: sample@mail.com</div><span class="lp-reveal-btn">${icon('eye', 15)} Reveal purchased logs</span></div></div></div>
+        </a>
       </section>
 
-      <nav class="lp-platforms" aria-label="Log platforms"><span>Logs for</span>${platforms.map((name) => `<a data-link href="/marketplace?category=logs&platform=${encodeURIComponent(name)}"><img src="/assets/social/${name.toLowerCase()}.svg" alt="" width="22" height="22">${name}</a>`).join('')}</nav>
+      ${featured.length ? `<section class="lp-featured"><div class="lp-head lp-rv"><h2>Available now</h2><a class="lp-link" data-link href="/marketplace">Browse all ${icon('arrow', 16)}</a></div><div class="product-grid lp-rv" style="--d:100ms">${featured.map(productCard).join('')}</div></section>` : ''}
 
-      <section class="lp-cats" aria-label="Categories">
-        <a class="lp-cat lp-cat-logs" data-link href="/marketplace?category=logs"><span class="lp-cat-icon">${icon('file', 26)}</span><span><h2>Logs</h2><p>Log products for Instagram, TikTok, Facebook, X, Telegram and YouTube, with the details and stock shown before you buy.</p><span class="lp-cat-go">Browse logs ${icon('arrow', 16)}</span></span></a>
-        <a class="lp-cat lp-cat-num" data-link href="/marketplace?category=virtual-numbers"><span class="lp-cat-icon">${icon('phone', 26)}</span><span><h2>Virtual numbers</h2><p>Compare live quotes from two providers, pick a country and service, and receive the verification SMS in your order.</p><span class="lp-cat-go">See numbers ${icon('arrow', 16)}</span></span></a>
-      </section>
-
-      <section class="lp-how">
-        <div class="lp-head"><h2 class="lp-h2">From transfer to delivery in three steps</h2></div>
-        <ol class="lp-steps">
-          <li><b>1</b><h3>Fund your wallet</h3><p>Request a dedicated account and pay by bank transfer. Your balance updates once the payment provider verifies the transfer.</p></li>
-          <li><b>2</b><h3>Choose what you need</h3><p>Pick a log or a virtual number. The price and stock are confirmed again at checkout, so you never pay a stale price.</p></li>
-          <li><b>3</b><h3>Collect your delivery</h3><p>Open the order to reveal your log, or watch the SMS arrive for your number. Only the signed-in owner can see it.</p></li>
-        </ol>
-      </section>
-
-      ${featured.length ? `<section class="lp-featured"><div class="lp-head"><h2 class="lp-h2">Available now</h2><a class="lp-link" data-link href="/marketplace">Browse all ${icon('arrow', 16)}</a></div><div class="product-grid">${featured.map(productCard).join('')}</div></section>` : ''}
-
-      <section class="lp-close"><div><h2 class="lp-h2">Ready to place your first order?</h2><p>Create an account, fund your wallet, and check out in a few minutes.</p></div><a class="lp-btn" data-link href="${state.user ? '/marketplace' : '/register'}">${state.user ? 'Go to the marketplace' : 'Create an account'} ${icon('arrow', 18)}</a></section>
-    </main>
-    <footer class="public-footer page-wrap"><a data-link href="/">${logo('footer-logo')}</a><p>Emmyjosh Logs Marketplace · Lawful services, clearly presented.</p><div><a data-link href="/admin/login">Admin</a><a data-link href="/support">Support</a><a data-link href="/support#terms">Terms</a><a data-link href="/support#privacy">Privacy</a></div></footer>
+      <section class="lp-close lp-rv"><div><h2>Ready to place your first order?</h2><p>Create an account, fund your wallet, and check out in a few minutes.</p></div><a class="lp-pill lp-pill-o" data-link href="${state.user ? '/marketplace' : '/register'}">${state.user ? 'Go to the marketplace' : 'Create an account'} ${icon('arrow', 16)}</a></section>
+    </div>
+    <footer class="public-footer page-wrap"><a data-link href="/">${logo('footer-logo')}</a><p>Emmyjosh Logs Marketplace</p><div><a data-link href="/admin/login">Admin</a><a data-link href="/support">Support</a><a data-link href="/support#terms">Terms</a><a data-link href="/support#privacy">Privacy</a></div></footer>
   </div>`;
 }
 
@@ -437,7 +588,7 @@ function marketplacePage() {
       : `<div class="empty-state"><span>${icon('search', 26)}</span><b>No services found</b><p>Try another search or category.</p></div>`;
   return accountShell('marketplace', `${pageHeading('DISCOVER', 'Our Marketplace', 'The best services, with clear descriptions and availability details.')}
     <div class="market-toolbar"><form class="search-form" data-form="market-search">${icon('search', 18)}<input name="q" type="search" value="${escapeHTML(query)}" placeholder="Search products…"><button class="button button-small" type="submit">Search</button></form><label class="sort-control"><span>Sort by:</span><select data-change="sort"><option value="popular" ${sort === 'popular' ? 'selected' : ''}>Popular</option><option value="price_asc" ${sort === 'price_asc' ? 'selected' : ''}>Price: low to high</option><option value="price_desc" ${sort === 'price_desc' ? 'selected' : ''}>Price: high to low</option><option value="newest">Newest</option></select></label></div>
-    <div class="market-layout"><aside class="category-filter"><span class="filter-title">CATEGORIES</span>${categories.map(([key, label]) => `<a data-link class="category-filter-link ${category === key ? 'active' : ''}" href="/marketplace${key === 'all' ? '' : `?category=${key}`}"><span class="category-mini-icon">${icon(key === 'virtual-numbers' ? 'phone' : key === 'logs' ? 'file' : 'grid', 16)}</span>${label}<span class="filter-arrow">›</span></a>`).join('')}${category !== 'virtual-numbers' ? platformFilter : ''}<div class="lawful-note">${icon('shield', 17)}<span>Listings are intended for lawful, authorized use.</span></div></aside>
+    <div class="market-layout"><aside class="category-filter"><span class="filter-title">CATEGORIES</span>${categories.map(([key, label]) => `<a data-link class="category-filter-link ${category === key ? 'active' : ''}" href="/marketplace${key === 'all' ? '' : `?category=${key}`}"><span class="category-mini-icon">${icon(key === 'virtual-numbers' ? 'phone' : key === 'logs' ? 'file' : 'grid', 16)}</span>${label}<span class="filter-arrow">›</span></a>`).join('')}${category !== 'virtual-numbers' ? platformFilter : ''}</aside>
       <section class="market-results">${state.ownProductError ? `<div class="own-catalog-note">${escapeHTML(state.ownProductError)} <button class="link-button" data-action="retry-own-catalog">Retry own-stock catalog</button></div>` : ''}${catalogError}<div class="results-heading"><b>${state.productError ? 'Catalog unavailable' : state.productsLoading ? 'Loading services…' : `${list.length} services`}</b><span>Service availability is confirmed when you place an order.</span></div><div class="product-grid market-products">${catalogContent}</div>${category !== 'virtual-numbers' ? renderSupplierLogs({ signedIn: Boolean(state.user), loading: state.supplierLoading, error: state.supplierError, quotes: state.supplierQuotes, status: state.supplierStatus }) : ''}</section></div>`);
 }
 
@@ -465,11 +616,171 @@ function productPage(id) {
     <section class="panel info-panel"><div><span class="eyebrow">SERVICE INFORMATION</span><h2>Before you continue</h2><p>${escapeHTML(serviceTerms)}</p></div><a data-link class="text-link" href="/support">Ask support ${icon('arrow', 15)}</a></section>`);
 }
 
+const AUTH_CSS = `
+.lp-auth .lp-hero{min-height:calc(100vh - 80px)}
+.lp-auth .lp-hero-copy{padding:56px clamp(24px,5vw,72px)}
+.lp-auth-inner{width:min(100%,520px);margin:0 auto}
+.lp-auth .lp-h1{font-size:clamp(2rem,3.4vw,2.8rem);margin-bottom:10px;max-width:none}
+.lp-auth .lp-lead{font-size:1rem;margin-bottom:24px}
+.lp-form{display:grid;gap:16px;width:100%}
+.lp-row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.lp-field{display:grid;gap:6px;font-size:.875rem;font-weight:600}
+.lp-field input{width:100%;box-sizing:border-box;padding:13px 16px;border-radius:14px;border:1.5px solid var(--line);background:#fff;color:var(--ink);font:inherit;font-weight:400;transition:border-color .2s ease,box-shadow .2s ease}
+.lp-field input::placeholder{color:#b3a79b}
+.lp-field input:focus{outline:none;border-color:var(--o);box-shadow:0 0 0 4px rgba(232,101,10,.16)}
+.lp-between{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:.875rem}
+.lp-check{display:inline-flex;align-items:center;gap:8px;font-weight:500}
+.lp-check input{accent-color:var(--o);width:16px;height:16px}
+.lp-form .lp-link{font-size:.875rem}
+.lp-submit{width:100%;justify-content:center;cursor:pointer;font:inherit;font-weight:600;background:var(--o);border-color:var(--o)}
+.lp-submit:disabled{opacity:.6;cursor:wait;transform:none}
+.lp-feedback{margin:0 0 14px;font-size:.875rem;color:#b3340a}
+.lp-form .lp-feedback{margin:0}
+.lp-feedback:empty{display:none}
+.lp-or{display:flex;align-items:center;gap:12px;margin:22px 0 14px;color:var(--muted);font-size:.8125rem}
+.lp-or::before,.lp-or::after{content:"";flex:1;height:1px;background:var(--line)}
+.lp-social{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.lp-social .lp-pill{justify-content:center;cursor:pointer;font:inherit;font-weight:600}
+.lp-switch{margin:22px 0 0;font-size:.9375rem;color:var(--muted)}
+.lp-switch a{color:var(--o);font-weight:700;text-decoration:none}
+.lp-switch a:hover{text-decoration:underline;text-underline-offset:4px}
+
+/* left brand panel */
+.lp-brand{position:relative;overflow:hidden;min-height:calc(100vh - 80px);display:flex;flex-direction:column;justify-content:space-between;gap:32px;padding:48px clamp(24px,5vw,64px);color:#fff;background:linear-gradient(135deg,#ffb067 0%,#f47a1f 38%,#d9560a 72%,#a93f05 100%)}
+.lp-brand::before,.lp-brand::after{content:"";position:absolute;border-radius:50%;filter:blur(60px);pointer-events:none}
+.lp-brand::before{width:520px;height:520px;left:-140px;top:-160px;background:rgba(255,255,255,.45);animation:lp-drift 14s ease-in-out infinite alternate}
+.lp-brand::after{width:560px;height:560px;right:-180px;bottom:-220px;background:rgba(110,26,0,.55);animation:lp-drift 17s ease-in-out infinite alternate-reverse}
+.lp-brand>*{position:relative;z-index:1}
+.lp-brand-deco{position:absolute!important;inset:0;z-index:0!important;pointer-events:none}
+.lp-ring2{position:absolute;border-radius:50%;border:1.5px solid rgba(255,255,255,.3)}
+.lp-dots{position:absolute;left:40px;bottom:40px;width:150px;height:150px;opacity:.75;background-image:radial-gradient(rgba(255,255,255,.6) 1.6px,transparent 1.9px);background-size:20px 20px}
+.lp-chip{position:absolute;display:inline-flex;align-items:center;gap:10px;padding:12px 18px;border-radius:999px;background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.5);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);font-weight:600;font-size:.9rem;color:#fff;box-shadow:0 20px 40px -22px rgba(70,20,0,.6)}
+.lp-chip svg{flex:none}
+.lp-brand-logo{align-self:flex-start;display:inline-flex;background:#fff;border-radius:16px;padding:10px 18px;box-shadow:0 18px 40px -20px rgba(70,20,0,.6)}
+.lp-brand-logo .brand-logo{display:block;height:48px;width:auto;max-width:none}
+.lp-brand-copy h2{margin:0 0 12px;font-size:clamp(2.6rem,4.6vw,4.2rem);line-height:1.02;letter-spacing:-.04em;font-weight:500}
+.lp-brand-copy p{margin:0;max-width:24em;font-size:1.0625rem;line-height:1.6;color:rgba(255,255,255,.9)}
+
+@media (max-width:1000px){
+  .lp-auth .lp-hero{min-height:0}
+  .lp-brand{min-height:0;gap:24px;padding:28px 24px 32px}
+  .lp-brand-deco{display:none}
+  .lp-brand-copy h2{font-size:2.2rem}
+}
+@media (max-width:560px){.lp-row2{grid-template-columns:1fr}.lp-social{grid-template-columns:1fr}}
+`;
+
+function ensureAuthStyles() {
+  ensureLandingStyles();
+  if (document.getElementById('lp-auth-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'lp-auth-styles';
+  style.textContent = AUTH_CSS;
+  document.head.appendChild(style);
+}
+
+// The orange artwork panel shared by the landing hero and the login/register pages.
+function heroArt() {
+  const heights = [18, 24, 20, 28, 34, 30, 40, 36, 44, 52, 48, 58, 50, 62, 70, 64, 78, 72, 88, 80, 96, 100];
+  const bars = heights.map((h, i) => `<i style="--h:${h}%;--i:${i}"></i>`).join('');
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((key) => `<span>${key}</span>`).join('');
+  return `<div class="lp-hero-art" aria-hidden="true">
+    <div class="lp-layer" style="--depth:14;left:150px;top:90px">
+      <div class="lp-win lp-float">
+        <div class="lp-win-bar"><i></i><i></i><i></i><span>emmyjoshlogs.com/dashboard</span></div>
+        <div class="lp-win-body">
+          <div class="lp-win-side"><b>Wallet</b><span>Orders</span><span>Numbers</span><span>Support</span></div>
+          <div class="lp-win-main">
+            <h4>Overview</h4>
+            <div class="lp-stats">
+              <div><small>Wallet balance</small><strong data-count="48250" data-decimals="2" data-prefix="₦">₦48,250.00</strong><em>▲ 4%</em></div>
+              <div><small>Orders</small><strong data-count="126">126</strong><em>▲ 12%</em></div>
+            </div>
+            <div class="lp-chart-card"><small>Spending this month</small><div class="lp-bars">${bars}</div></div>
+            <div class="lp-split"><span class="lp-donut"></span><div class="lp-rows"><div><span><i style="background:#e8650a"></i>Logs</span><b>₦29,400</b></div><div><span><i style="background:#ffb067"></i>Virtual numbers</span><b>₦18,850</b></div><div><span><i style="background:#ffe0c2"></i>Other</span><b>₦4,200</b></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="lp-layer lp-phone-layer" style="--depth:30;left:34px;top:170px">
+      <div class="lp-phone lp-float lp-float-b">
+        <div class="lp-phone-screen">
+          <div class="lp-ph-top"><span>9:41</span><span>●●▮</span></div>
+          <p class="lp-ph-title">Fund wallet</p>
+          <div class="lp-ph-amount"><span class="lp-type">₦5,000</span></div>
+          <div class="lp-ph-chips"><span>₦2,000</span><span>₦5,000</span><span>₦10,000</span></div>
+          <p class="lp-ph-pay">Pay by bank transfer</p>
+          <div class="lp-ph-btn">Continue</div>
+          <div class="lp-keys">${keys}</div>
+        </div>
+      </div>
+    </div>
+    <span class="lp-example">Example data</span>
+  </div>`;
+}
+
 function authPage(kind) {
+  ensureAuthStyles();
   const isLogin = kind === 'login';
-  return `<div class="auth-page"><a data-link href="/" class="auth-back">${icon('arrow', 17)} Back to home</a><section class="auth-card"><aside class="auth-brand"><a data-link href="/">${logo('auth-logo')}</a><div><span class="eyebrow light-eyebrow">EMMYJOSH LOGS MARKETPLACE</span><h2>${isLogin ? 'Your trusted<br>digital services hub.' : 'Join the<br>marketplace.'}</h2><p>${isLogin ? 'A clear place to manage your services and account.' : 'Create an account and explore available services.'}</p></div><span class="auth-shield">${icon('shield', 42)}</span></aside><div class="auth-form-wrap"><div class="auth-form-heading"><a data-link href="/">${logo('form-logo')}</a><h1>${isLogin ? 'Welcome back' : 'Create your account'}</h1><p>${isLogin ? 'Sign in to continue to your account.' : 'It’s quick and easy.'}</p></div>${state.authMessage ? `<p class="auth-feedback" role="status">${escapeHTML(state.authMessage)}</p>` : ''}
-    <form class="stack-form" data-form="${isLogin ? 'login' : 'register'}">${isLogin ? `<label>Email address or phone<input name="identifier" required autocomplete="username" placeholder="Email, phone, or username"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="current-password" placeholder="Password"></label><div class="form-between"><label class="check-label"><input name="rememberMe" type="checkbox"><span>Remember me</span></label><a data-link class="form-link" href="/support#password">Forgot password?</a></div>` : `<label>Username<input name="username" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]{3,30}" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="3–30 letters, numbers, or underscores"></label><label>Full name<input name="fullName" required autocomplete="name" placeholder="Full name"></label><label>Email address<input name="email" type="email" required autocomplete="email" placeholder="Email address"></label><label>Phone number<input name="phoneNumber" type="tel" required autocomplete="tel" placeholder="Phone number"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="Password"></label><label>Confirm password<input name="confirmPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="Confirm password"></label>`}<button class="button auth-submit" type="submit">${isLogin ? 'Login' : 'Register account'} ${icon('arrow', 17)}</button><p class="auth-feedback" data-feedback></p></form>
-    <div class="auth-divider"><span>or continue with</span></div><div class="social-buttons"><button type="button" class="social-button" data-action="social-login">${googleMark()} Google</button><button type="button" class="social-button" data-action="social-login">${facebookMark()} Facebook</button></div><p class="auth-switch">${isLogin ? 'Don’t have an account?' : 'Already have an account?'} <a data-link href="${isLogin ? '/register' : '/login'}">${isLogin ? 'Register' : 'Login'}</a></p><p class="auth-disclaimer">Preview interface · real authentication requires a configured API.</p></div></section></div><div class="toast-slot" aria-live="polite"></div>`;
+  const field = (label, name, attrs) => `<label class="lp-field">${label}<input name="${name}" ${attrs}></label>`;
+  const loginFields = `
+    ${field('Email address or phone', 'identifier', 'required autocomplete="username" placeholder="Email, phone, or username"')}
+    ${field('Password', 'password', 'type="password" required minlength="8" autocomplete="current-password" placeholder="Password"')}
+    <div class="lp-between"><label class="lp-check"><input name="rememberMe" type="checkbox"><span>Remember me</span></label><a data-link class="lp-link" href="/support#password">Forgot password?</a></div>`;
+  const registerFields = `
+    <div class="lp-row2">
+      ${field('Username', 'username', 'required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]{3,30}" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Letters, numbers, _"')}
+      ${field('Full name', 'fullName', 'required autocomplete="name" placeholder="Full name"')}
+    </div>
+    <div class="lp-row2">
+      ${field('Email address', 'email', 'type="email" required autocomplete="email" placeholder="Email address"')}
+      ${field('Phone number', 'phoneNumber', 'type="tel" required autocomplete="tel" placeholder="Phone number"')}
+    </div>
+    <div class="lp-row2">
+      ${field('Password', 'password', 'type="password" required minlength="8" autocomplete="new-password" placeholder="Password"')}
+      ${field('Confirm password', 'confirmPassword', 'type="password" required minlength="8" autocomplete="new-password" placeholder="Confirm password"')}
+    </div>`;
+  const chips = [
+    ['wallet', 'Bank transfer funding', 'top:17%;right:7%', 'lp-float'],
+    ['phone', 'Virtual numbers', 'top:37%;right:26%', 'lp-float lp-float-b'],
+    ['shield', 'Private delivery', 'top:56%;right:8%', 'lp-float'],
+  ].map(([glyph, label, pos, cls]) => `<span class="lp-chip ${cls}" style="${pos}">${icon(glyph, 18)}${label}</span>`).join('');
+  return `<div class="site-public lp lp-auth">${publicHeader()}
+    <section class="lp-hero">
+      <aside class="lp-brand">
+        <div class="lp-brand-deco" aria-hidden="true">
+          <i class="lp-ring2" style="width:560px;height:560px;right:-200px;top:60px"></i>
+          <i class="lp-ring2" style="width:380px;height:380px;right:-110px;top:150px"></i>
+          <i class="lp-ring2" style="width:200px;height:200px;right:-20px;top:240px"></i>
+          <i class="lp-dots"></i>
+          ${chips}
+        </div>
+        <a class="lp-brand-logo" data-link href="/" aria-label="Emmyjosh Logs home">${logo()}</a>
+        <div class="lp-brand-copy">
+          <h2 class="lp-rv">${isLogin ? 'Welcome back' : 'Welcome'}</h2>
+          <p class="lp-rv" style="--d:100ms">${isLogin ? 'Sign in to pick up where you left off. Your wallet, orders and virtual numbers are waiting.' : 'Create your account to buy logs and virtual numbers from one Naira wallet.'}</p>
+        </div>
+      </aside>
+      <div class="lp-hero-copy">
+        <div class="lp-auth-inner">
+          <h1 class="lp-h1 lp-rv">${isLogin ? 'Sign in' : 'Create your <span class="lp-muted">account</span>'}</h1>
+          <p class="lp-lead lp-rv" style="--d:100ms">${isLogin ? 'Enter your details to continue to your account.' : 'It takes a minute.'}</p>
+          ${state.authMessage ? `<p class="lp-feedback" role="status">${escapeHTML(state.authMessage)}</p>` : ''}
+          <form class="lp-form lp-rv" style="--d:180ms" data-form="${isLogin ? 'login' : 'register'}">
+            ${isLogin ? loginFields : registerFields}
+            <button class="lp-pill lp-submit" type="submit">${isLogin ? 'Login' : 'Register account'} ${icon('arrow', 17)}</button>
+            <p class="lp-feedback" data-feedback></p>
+          </form>
+          <div class="lp-or lp-rv"><span>or continue with</span></div>
+          <div class="lp-social lp-rv">
+            <button type="button" class="lp-pill lp-pill-line" data-action="social-login">${googleMark()} Google</button>
+            <button type="button" class="lp-pill lp-pill-line" data-action="social-login">${facebookMark()} Facebook</button>
+          </div>
+          <p class="lp-switch lp-rv">${isLogin ? 'Don’t have an account?' : 'Already have an account?'} <a data-link href="${isLogin ? '/register' : '/login'}">${isLogin ? 'Register' : 'Login'}</a></p>
+        </div>
+      </div>
+    </section>
+  </div><div class="toast-slot" aria-live="polite"></div>`;
 }
 
 function googleMark() { return '<span class="google-mark" aria-hidden="true">G</span>'; }
@@ -606,7 +917,7 @@ function notificationsPage() {
 }
 
 function supportPage() {
-  return `<div class="site-public">${publicHeader()}<main class="support-page page-wrap">${previewNotice()}<section class="support-hero" id="about"><div><span class="eyebrow">ABOUT EMMYJOSH LOGS</span><h1>Digital services,<br><span>made clearer.</span></h1><p>Emmyjosh Logs Marketplace brings together lawful digital services and account tools in a straightforward experience.</p><a data-link class="button" href="/marketplace">Explore marketplace ${icon('arrow', 17)}</a></div><div class="support-brand-visual">${logo('support-logo')}<span>YOUR TRUSTED LOGS &amp; VIRTUAL NUMBER HUB</span><div class="support-swoosh"></div></div></section><section class="support-content-grid"><article class="panel" id="contact"><div class="panel-head"><div><span class="eyebrow">WE’RE HERE TO HELP</span><h2>Contact support</h2></div>${icon('help', 23, 'panel-head-icon')}</div><p>Send a question or tell us what you need help with. A ticket is only recorded when the support API confirms it.</p><form class="stack-form" data-form="support"><label>Subject<input name="subject" required minlength="3" maxlength="160" placeholder="How can we help?"></label><label>Message<textarea name="body" required minlength="3" maxlength="4000" rows="5" placeholder="Share a few details…"></textarea></label><button class="button" type="submit">Send support request ${icon('arrow', 17)}</button><p class="form-feedback" data-feedback></p></form></article><aside class="policy-panel"><span class="eyebrow">HELPFUL INFORMATION</span><a id="terms" href="#terms">Terms of service <small>Content pending</small><span>›</span></a><a id="privacy" href="#privacy">Privacy policy <small>Content pending</small><span>›</span></a><a id="refunds" href="#refunds">Refund information <small>Content pending</small><span>›</span></a><a id="password" href="#password">Password recovery <small>Not configured</small><span>›</span></a><div class="policy-note">${icon('shield', 18)}<p>Only lawfully sourced products and authorized use are supported. Payment questions are reviewed against verified provider records. Official policy copy has not been provided yet.</p></div></aside></section></main><footer class="public-footer page-wrap"><a data-link href="/">${logo('footer-logo')}</a><p>Emmyjosh Logs Marketplace · Lawful services, clearly presented.</p><div><a data-link href="/admin/login">Admin</a><a data-link href="/support">Support</a><a data-link href="/support#terms">Terms</a><a data-link href="/support#privacy">Privacy</a></div></footer></div><div class="toast-slot" aria-live="polite"></div>`;
+  return `<div class="site-public">${publicHeader()}<main class="support-page page-wrap">${previewNotice()}<section class="support-hero" id="about"><div><span class="eyebrow">ABOUT EMMYJOSH LOGS</span><h1>Digital services,<br><span>made clearer.</span></h1><p>Emmyjosh Logs Marketplace brings together lawful digital services and account tools in a straightforward experience.</p><a data-link class="button" href="/marketplace">Explore marketplace ${icon('arrow', 17)}</a></div><div class="support-brand-visual">${logo('support-logo')}<span>YOUR TRUSTED LOGS &amp; VIRTUAL NUMBER HUB</span><div class="support-swoosh"></div></div></section><section class="support-content-grid"><article class="panel" id="contact"><div class="panel-head"><div><span class="eyebrow">WE’RE HERE TO HELP</span><h2>Contact support</h2></div>${icon('help', 23, 'panel-head-icon')}</div><p>Send a question or tell us what you need help with. A ticket is only recorded when the support API confirms it.</p><form class="stack-form" data-form="support"><label>Subject<input name="subject" required minlength="3" maxlength="160" placeholder="How can we help?"></label><label>Message<textarea name="body" required minlength="3" maxlength="4000" rows="5" placeholder="Share a few details…"></textarea></label><button class="button" type="submit">Send support request ${icon('arrow', 17)}</button><p class="form-feedback" data-feedback></p></form></article><aside class="policy-panel"><span class="eyebrow">HELPFUL INFORMATION</span><a id="terms" href="#terms">Terms of service <small>Content pending</small><span>›</span></a><a id="privacy" href="#privacy">Privacy policy <small>Content pending</small><span>›</span></a><a id="refunds" href="#refunds">Refund information <small>Content pending</small><span>›</span></a><a id="password" href="#password">Password recovery <small>Not configured</small><span>›</span></a><div class="policy-note">${icon('shield', 18)}<p>Payment questions are reviewed against verified provider records. Official policy copy has not been provided yet.</p></div></aside></section></main><footer class="public-footer page-wrap"><a data-link href="/">${logo('footer-logo')}</a><p>Emmyjosh Logs Marketplace</p><div><a data-link href="/admin/login">Admin</a><a data-link href="/support">Support</a><a data-link href="/support#terms">Terms</a><a data-link href="/support#privacy">Privacy</a></div></footer></div><div class="toast-slot" aria-live="polite"></div>`;
 }
 
 function adminSidebar(active) {
@@ -680,9 +991,19 @@ function adminDataPanel(section) {
 
 function render() {
   const route = window.location.pathname.replace(/\/$/, '') || '/';
+  const PROTECTED_ROUTES = ['/dashboard', '/wallet', '/orders', '/numbers', '/transactions', '/profile', '/notifications'];
+  if (!state.user && (PROTECTED_ROUTES.includes(route) || route.startsWith('/orders/') || route.startsWith('/numbers/orders/'))) {
+    state.authMessage = state.authMessage || 'Please sign in to continue.';
+    history.replaceState({}, '', `/login?next=${encodeURIComponent(route + window.location.search)}`);
+    return render();
+  }
   const query = new URLSearchParams(window.location.search);
   document.title = route === '/' ? 'Emmyjosh Logs Marketplace' : `${route.split('/').filter(Boolean).at(-1)?.replaceAll('-', ' ') || 'Marketplace'} · Emmyjosh Logs`;
   const managedAdminRoutes = ['/admin', '/admin/login', '/admin/products', '/admin/pricing', '/admin/inventory', '/admin/uploads', '/admin/orders', '/admin/checkout', '/admin/supplier', '/admin/audit-logs'];
+  if (route.startsWith('/admin/') && !managedAdminRoutes.includes(route)) {
+    history.replaceState({}, '', '/admin/login');
+    return render();
+  }
   if (managedAdminRoutes.includes(route)) {
     void mountAdminTools(app, { route, navigate, icon, logo, escapeHTML, toast });
     return;
@@ -706,6 +1027,7 @@ function render() {
   else if (route === '/admin' || route.startsWith('/admin/')) app.innerHTML = adminPage(route);
   else app.innerHTML = `<div class="not-found"><a data-link href="/">${logo()}</a><h1>Page not found</h1><p>That page isn’t available.</p><a data-link class="button" href="/">Return home ${icon('arrow', 16)}</a></div>`;
   bindEvents();
+  if (['/', '/login', '/register'].includes(route)) initLanding();
   if ((route === '/' || route === '/marketplace') && !state.ownProductsLoaded) {
     state.ownProductsLoaded = true;
     void loadOwnCatalog();
@@ -743,6 +1065,7 @@ function render() {
 }
 
 function navigate(target) {
+  if (target !== '/') landingAnimated = false;
   if (!target.startsWith('/orders/') && !target.startsWith('/numbers/orders/')) {
     state.delivery = null;
     state.deliveryModalOpen = false;
@@ -1113,7 +1436,9 @@ function bindEvents() {
         await api.login({ identifier: values.identifier, password: values.password, rememberMe: form.rememberMe.checked });
         await refreshSession();
         state.apiConnected = true; state.loaded = {}; state.signedOut = false;
-        toast('Signed in with the configured API.', 'success'); navigate('/dashboard'); return;
+        toast('Signed in with the configured API.', 'success');
+        const next = new URLSearchParams(window.location.search).get('next');
+        navigate(next && next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard'); return;
       }
       if (kind === 'register') {
         if (values.password !== values.confirmPassword) throw new ApiError('Your passwords do not match.', 422, 'VALIDATION');
