@@ -5,3 +5,5 @@ node_modules/
 *.key
 *.sql
 *.log
+!certs/database-ca.pem
+!certs/database-ca.pem
