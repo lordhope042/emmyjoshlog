@@ -64,8 +64,18 @@ function parseDatabaseUrl(value = process.env.DATABASE_URL) {
   const disabled = sslmode === 'disable' || ['0', 'false', 'disabled', 'none'].includes(sslFlag);
   const requested = !disabled && (['require', 'verify-ca', 'verify-full'].includes(sslmode) || ['1', 'true'].includes(sslFlag));
   if (requested) {
-    const ca = readDatabaseCa();
-    config.ssl = { rejectUnauthorized: true, ...(ca ? { ca } : {}) };
+    // Default: encrypted AND the server certificate is verified (against DB_SSL_CA_* / certs/database-ca.pem if given).
+    // Opt-out for hosts whose CA is not in Node's trust store (e.g. Supabase): set DB_SSL_REJECT_UNAUTHORIZED=false.
+    // The connection stays encrypted; only the certificate-chain check is skipped, like libpq's sslmode=require.
+    // The opt-out never applies to sslmode=verify-ca / verify-full, which always verify.
+    const strictMode = ['verify-ca', 'verify-full'].includes(sslmode);
+    const skipVerify = !strictMode && ['0', 'false', 'off', 'no'].includes(String(process.env.DB_SSL_REJECT_UNAUTHORIZED || '').trim().toLowerCase());
+    if (skipVerify) {
+      config.ssl = { rejectUnauthorized: false };
+    } else {
+      const ca = readDatabaseCa();
+      config.ssl = { rejectUnauthorized: true, ...(ca ? { ca } : {}) };
+    }
   } else if (process.env.NODE_ENV === 'production' && !isLocalHost(config.host) && process.env.DB_ALLOW_INSECURE !== '1') {
     throw new Error('Production database connections must use TLS: add ?sslmode=require to DATABASE_URL (set DB_ALLOW_INSECURE=1 only for a private network)');
   }
