@@ -125,6 +125,36 @@ async function audit(db, actor, action, targetId, detail) {
   );
 }
 
+const INSERT_BATCH_SIZE = 100; // keep modest: import rows can carry large encrypted payloads
+
+// "?, ?, ?" for a list of values. Explicit placeholders (not mysql2's `VALUES ?` / `IN (?)`
+// array expansion) so the SQL also works through your sql-translate layer.
+const inList = (values) => values.map(() => '?').join(', ');
+
+// Multi-row INSERT. `db` can be the pool or a transaction connection.
+async function insertBatches(db, table, columns, valueRows) {
+  const group = `(${inList(columns)})`;
+  for (let i = 0; i < valueRows.length; i += INSERT_BATCH_SIZE) {
+    const chunk = valueRows.slice(i, i + INSERT_BATCH_SIZE);
+    await db.query(
+      `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${chunk.map(() => group).join(', ')}`,
+      chunk.flat(),
+    );
+  }
+}
+
+// One audit row per target, same action and detail.
+async function auditMany(db, actor, action, targetIds, detail) {
+  if (!targetIds.length) return;
+  const json = JSON.stringify(auditDetail(detail || {}));
+  await insertBatches(
+    db,
+    'ej_admin_audit_events',
+    ['action', 'actor_id', 'actor_email', 'target_id', 'detail_json'],
+    targetIds.map((target) => [action, actor?.id || null, actor?.email || null, target, json]),
+  );
+}
+
 function productInput(body, existing = {}) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     fail(400, 'invalid_request', 'Product body is invalid');
@@ -649,15 +679,26 @@ function importCounts(diagnostics) {
   };
 }
 
+let lastPurgeAt = 0;
+const PURGE_INTERVAL_MS = 60 * 1000;
+
 async function purgeExpiredStaging(database) {
-  await exec(
-    database,
-    "UPDATE ej_own_import_rows SET payload_ciphertext = NULL WHERE import_id IN (SELECT id FROM ej_own_imports WHERE expires_at < CURRENT_TIMESTAMP(3) AND status <> 'COMMITTED')",
-  );
-  await exec(
-    database,
-    "DELETE FROM ej_own_import_rows WHERE import_id IN (SELECT id FROM ej_own_imports WHERE expires_at < CURRENT_TIMESTAMP(3) AND status <> 'COMMITTED')",
-  );
+  const now = Date.now();
+  if (now - lastPurgeAt < PURGE_INTERVAL_MS) return;
+  lastPurgeAt = now;
+  try {
+    await exec(
+      database,
+      "UPDATE ej_own_import_rows SET payload_ciphertext = NULL WHERE import_id IN (SELECT id FROM ej_own_imports WHERE expires_at < CURRENT_TIMESTAMP(3) AND status <> 'COMMITTED')",
+    );
+    await exec(
+      database,
+      "DELETE FROM ej_own_import_rows WHERE import_id IN (SELECT id FROM ej_own_imports WHERE expires_at < CURRENT_TIMESTAMP(3) AND status <> 'COMMITTED')",
+    );
+  } catch (error) {
+    lastPurgeAt = 0; // retry on the next request
+    throw error;
+  }
 }
 
 // Attempt maps would otherwise keep one entry per visitor forever. Sweep expired entries.
@@ -720,7 +761,7 @@ function createAdminRouter(options = {}) {
 
     const found = await rows(
       db(),
-      `SELECT s.token_hash, s.csrf_hash, s.expires_at,
+      `SELECT s.token_hash, s.csrf_hash, s.expires_at, s.last_seen_at,
               u.id, u.email, u.role
        FROM ej_admin_sessions s
        JOIN ej_admin_users u ON u.id = s.user_id
@@ -761,6 +802,9 @@ function createAdminRouter(options = {}) {
 
   function writeAuth(req, res, next) {
     catalogCache.value = null; // any admin write may change the public catalog
+    // Clear again once the write finishes, so a public request that landed mid-write
+    // cannot leave stale data cached.
+    res.on('finish', () => { catalogCache.value = null; });
     jsonWrite(req);
     const supplied = req.get('X-Admin-CSRF');
 
@@ -827,12 +871,15 @@ function createAdminRouter(options = {}) {
         });
       }
 
-      // Best effort: the page does not need to wait for this write.
-      exec(
-        db(),
-        'UPDATE ej_admin_sessions SET last_seen_at = CURRENT_TIMESTAMP(3) WHERE token_hash = ?',
-        [session.token_hash],
-      ).catch(() => {});
+      // Best effort, and at most once a minute: the page does not need to wait for this write.
+      const lastSeen = session.last_seen_at ? new Date(session.last_seen_at).getTime() : 0;
+      if (Date.now() - lastSeen > 60 * 1000) {
+        exec(
+          db(),
+          'UPDATE ej_admin_sessions SET last_seen_at = CURRENT_TIMESTAMP(3) WHERE token_hash = ?',
+          [session.token_hash],
+        ).catch(() => {});
+      }
 
       body.csrfToken = token;
     }
@@ -933,24 +980,24 @@ function createAdminRouter(options = {}) {
   }));
 
   router.get('/summary', auth, use(async (req, res) => {
-    const [products, available, imports, rules] = await Promise.all([
-      rows(
-        db(),
-        "SELECT (SELECT COUNT(*) FROM ej_admin_products WHERE source = 'DONMARKETPLACE') + (SELECT COUNT(*) FROM ej_own_products) AS count",
-      ),
-      rows(
-        db(),
-        "SELECT (SELECT COUNT(*) FROM ej_admin_inventory_units u JOIN ej_admin_products p ON p.id=u.product_id WHERE u.status = 'AVAILABLE' AND p.source = 'DONMARKETPLACE') + (SELECT COUNT(*) FROM ej_own_inventory_units WHERE status = 'AVAILABLE') AS count",
-      ),
-      rows(db(), 'SELECT COUNT(*) AS count FROM ej_own_imports'),
-      rows(db(), 'SELECT COUNT(*) AS count FROM ej_admin_pricing_rules'),
-    ]);
+    const [summary] = await rows(
+      db(),
+      `SELECT
+         (SELECT COUNT(*) FROM ej_admin_products WHERE source = 'DONMARKETPLACE')
+           + (SELECT COUNT(*) FROM ej_own_products) AS products,
+         (SELECT COUNT(*) FROM ej_admin_inventory_units u
+            JOIN ej_admin_products p ON p.id = u.product_id
+            WHERE u.status = 'AVAILABLE' AND p.source = 'DONMARKETPLACE')
+           + (SELECT COUNT(*) FROM ej_own_inventory_units WHERE status = 'AVAILABLE') AS available,
+         (SELECT COUNT(*) FROM ej_own_imports) AS imports,
+         (SELECT COUNT(*) FROM ej_admin_pricing_rules) AS pricing_rules`,
+    );
 
     res.json({
-      products: Number(products[0].count),
-      available: Number(available[0].count),
-      imports: Number(imports[0].count),
-      pricingRules: Number(rules[0].count),
+      products: Number(summary.products),
+      available: Number(summary.available),
+      imports: Number(summary.imports),
+      pricingRules: Number(summary.pricing_rules),
       supplier: {
         enabled: false,
         mode: 'sandbox',
@@ -960,27 +1007,27 @@ function createAdminRouter(options = {}) {
   }));
 
   router.get('/products', auth, use(async (req, res) => {
-    const products = await rows(
-      db(),
-      `SELECT p.id,p.name,p.platform,p.description,p.terms,
-              'OWN' AS source,p.status,p.acquisition_cost_minor,
-              p.selling_price_minor,p.social_metadata_json,p.min_qty,
-              p.max_qty,NULL AS supplier_product_id,p.created_at,p.updated_at
-       FROM ej_own_products p
-       UNION ALL
-       SELECT id,name,platform,description,terms,source,status,
-              acquisition_cost_minor,NULL AS selling_price_minor,
-              NULL AS social_metadata_json,min_qty,max_qty,
-              supplier_product_id,created_at,updated_at
-       FROM ej_admin_products
-       WHERE source='DONMARKETPLACE'
-       ORDER BY created_at DESC`,
-    );
-
-    const [rules, countsByProduct] = await Promise.all([
+    const [products, rules, countsByProduct] = await Promise.all([
+      rows(
+        db(),
+        `SELECT p.id,p.name,p.platform,p.description,p.terms,
+                'OWN' AS source,p.status,p.acquisition_cost_minor,
+                p.selling_price_minor,p.social_metadata_json,p.min_qty,
+                p.max_qty,NULL AS supplier_product_id,p.created_at,p.updated_at
+         FROM ej_own_products p
+         UNION ALL
+         SELECT id,name,platform,description,terms,source,status,
+                acquisition_cost_minor,NULL AS selling_price_minor,
+                NULL AS social_metadata_json,min_qty,max_qty,
+                supplier_product_id,created_at,updated_at
+         FROM ej_admin_products
+         WHERE source='DONMARKETPLACE'
+         ORDER BY created_at DESC`,
+      ),
       loadProductRules(db()),
       loadStatusCounts(db()),
     ]);
+
     const emptyCounts = () => ({ AVAILABLE: 0, RESERVED: 0, SOLD: 0, QUARANTINED: 0 });
     const output = [];
 
@@ -1159,6 +1206,9 @@ function createAdminRouter(options = {}) {
     const created = [];
 
     await inTransaction(db(), async (tx) => {
+      const productRows = [];
+      const unitRows = [];
+
       for (const listing of listings) {
         const platform = requireEnum(listing.platform, 'platform', platformValues);
         const category = requireEnum(listing.category, 'category', categoryValues);
@@ -1334,76 +1384,68 @@ function createAdminRouter(options = {}) {
           secret,
         );
 
-        await tx.query(
-          `INSERT INTO ej_own_products
-           (
-             id,
-             name,
-             platform,
-             description,
-             terms,
-             status,
-             acquisition_cost_minor,
-             min_qty,
-             max_qty,
-             selling_price_minor,
-             social_metadata_json
-           )
-           VALUES (?, ?, ?, ?, ?, 'ACTIVE', NULL, 1, 1, ?, ?)`,
-          [
-            productId,
-            label,
-            platform,
-            category === 'FORMAT' ? '' : description,
-            '',
-            priceMinor.toString(),
-            JSON.stringify(publicMeta),
-          ],
-        );
-
-        await tx.query(
-          `INSERT INTO ej_own_inventory_units
-           (
-             id,
-             product_id,
-             status,
-             source_ref,
-             payload_ciphertext,
-             fingerprint_hmac,
-             identity_hmac
-           )
-           VALUES (?, ?, 'AVAILABLE', NULL, ?, ?, ?)`,
-          [
-            id('eju_'),
-            productId,
-            encryptPayload(privateRecord, secret),
-            fingerprint,
-            identity,
-          ],
-        );
-
-        await audit(
-          tx,
-          req.admin,
-          'SOCIAL_LOG_CREATED',
+        productRows.push([
           productId,
-          { status: 'ACTIVE', count: 1 },
-        );
+          label,
+          platform,
+          category === 'FORMAT' ? '' : description,
+          '',
+          'ACTIVE',
+          null,
+          1,
+          1,
+          priceMinor.toString(),
+          JSON.stringify(publicMeta),
+        ]);
+
+        unitRows.push([
+          id('eju_'),
+          productId,
+          'AVAILABLE',
+          null,
+          encryptPayload(privateRecord, secret),
+          fingerprint,
+          identity,
+        ]);
 
         created.push(productId);
       }
+
+      await insertBatches(
+        tx,
+        'ej_own_products',
+        ['id', 'name', 'platform', 'description', 'terms', 'status',
+         'acquisition_cost_minor', 'min_qty', 'max_qty', 'selling_price_minor',
+         'social_metadata_json'],
+        productRows,
+      );
+
+      await insertBatches(
+        tx,
+        'ej_own_inventory_units',
+        ['id', 'product_id', 'status', 'source_ref', 'payload_ciphertext',
+         'fingerprint_hmac', 'identity_hmac'],
+        unitRows,
+      );
+
+      await auditMany(tx, req.admin, 'SOCIAL_LOG_CREATED', created, { status: 'ACTIVE', count: 1 });
     });
 
+    const createdRows = await rows(
+      db(),
+      `SELECT p.*, 'OWN' AS source, NULL AS supplier_product_id FROM ej_own_products p WHERE p.id IN (${inList(created)})`,
+      created,
+    );
+    const byId = new Map(createdRows.map((row) => [row.id, row]));
     const products = [];
 
     for (const productId of created) {
-      const product = await findProduct(db(), productId);
-
+      const product = byId.get(productId);
       products.push(
         adminProduct(
           product,
           await pricingFor(db(), product),
-          await countStatuses(db(), productId),
+          { AVAILABLE: 1, RESERVED: 0, SOLD: 0, QUARANTINED: 0 },
         ),
       );
     }
@@ -1781,8 +1823,10 @@ function createAdminRouter(options = {}) {
         "SELECT * FROM ej_admin_products WHERE status='ACTIVE' AND source='DONMARKETPLACE' FOR UPDATE",
       );
 
+      const rules = await loadProductRules(tx);
+
       for (const product of [...affected[0], ...supplierAffected[0]]) {
-        const price = await pricingFor(tx, product);
+        const price = await pricingFor(tx, product, undefined, rules);
 
         if (!price || price.invalid) {
           fail(
@@ -1829,6 +1873,8 @@ function createAdminRouter(options = {}) {
         [found.id],
       );
 
+      const rules = await loadProductRules(tx);
+
       const affected = await tx.query(
         "SELECT p.*, 'OWN' AS source FROM ej_own_products p WHERE status='ACTIVE'",
       );
@@ -1838,7 +1884,7 @@ function createAdminRouter(options = {}) {
       );
 
       for (const product of [...affected[0], ...supplierAffected[0]]) {
-        const price = await pricingFor(tx, product);
+        const price = await pricingFor(tx, product, undefined, rules);
 
         if (!price || price.invalid) {
           fail(
@@ -2031,29 +2077,25 @@ function createAdminRouter(options = {}) {
         ],
       );
 
-      for (const item of diagnostics) {
-        await tx.query(
-          `INSERT INTO ej_own_import_rows
-           (
-             import_id, line_no, status, source_ref, payload_ciphertext,
-             fingerprint_hmac, identity_hmac, diagnostic_code, duplicate_of_line
-           )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            importId,
-            item.lineNo || item.line,
-            item.status,
-            item.sourceRef || null,
-            status === 'VALIDATED' && item.status === 'NEW'
-              ? encryptPayload(item.payload, secret)
-              : null,
-            item.fingerprint || null,
-            item.identity || null,
-            item.code,
-            item.duplicateOfLine || null,
-          ],
-        );
-      }
+      await insertBatches(
+        tx,
+        'ej_own_import_rows',
+        ['import_id', 'line_no', 'status', 'source_ref', 'payload_ciphertext',
+         'fingerprint_hmac', 'identity_hmac', 'diagnostic_code', 'duplicate_of_line'],
+        diagnostics.map((item) => [
+          importId,
+          item.lineNo || item.line,
+          item.status,
+          item.sourceRef || null,
+          status === 'VALIDATED' && item.status === 'NEW'
+            ? encryptPayload(item.payload, secret)
+            : null,
+          item.fingerprint || null,
+          item.identity || null,
+          item.code,
+          item.duplicateOfLine || null,
+        ]),
+      );
 
       await audit(tx, req.admin, 'IMPORT_VALIDATED', importId, {
         validRows: counts.validRows,
@@ -2157,28 +2199,28 @@ function createAdminRouter(options = {}) {
       let added = 0;
 
       try {
-        for (const row of staged) {
+        const unitRows = staged.map((row) => {
           const payload = decryptPayload(row.payload_ciphertext, secret);
+          return [
+            id('eju_'),
+            found.product_id,
+            'AVAILABLE',
+            row.source_ref,
+            encryptPayload(payload, secret),
+            row.fingerprint_hmac,
+            row.identity_hmac,
+          ];
+        });
 
-          await tx.query(
-            `INSERT INTO ej_own_inventory_units
-             (
-               id, product_id, status, source_ref,
-               payload_ciphertext, fingerprint_hmac, identity_hmac
-             )
-             VALUES (?, ?, 'AVAILABLE', ?, ?, ?, ?)`,
-            [
-              id('eju_'),
-              found.product_id,
-              row.source_ref,
-              encryptPayload(payload, secret),
-              row.fingerprint_hmac,
-              row.identity_hmac,
-            ],
-          );
+        await insertBatches(
+          tx,
+          'ej_own_inventory_units',
+          ['id', 'product_id', 'status', 'source_ref', 'payload_ciphertext',
+           'fingerprint_hmac', 'identity_hmac'],
+          unitRows,
+        );
 
-          added += 1;
-        }
+        added = unitRows.length;
       } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
           fail(409, 'duplicate_inventory', 'Inventory duplicate prevented commit');
@@ -2396,7 +2438,10 @@ function createAdminRouter(options = {}) {
        ORDER BY p.created_at DESC`,
     );
 
-    const rules = await loadProductRules(db());
+    // Only load rules when a product actually needs them (OWN products with a selling price never do).
+    const rules = products.some((p) => p.selling_price_minor == null)
+      ? await loadProductRules(db())
+      : new Map();
     const output = [];
 
     for (const product of products) {

@@ -113,6 +113,65 @@ function controlledError(error, fallback = 'The request could not be completed. 
   return fallback;
 }
 
+// Admin sign-in page styling, matched to the customer login. Injected once; selectors are prefixed ejl- so
+// nothing in admin-tools.css is affected.
+const ADMIN_LOGIN_CSS = `
+.ejl-page{--ink:#17110d;--muted:#8a7e74;--o:#e8650a;--line:#f0e3d4;min-height:100vh;display:grid;grid-template-columns:1fr 1fr;background:#faf5ee;color:var(--ink)}
+.ejl-brand{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;justify-content:space-between;gap:32px;padding:48px clamp(24px,5vw,64px);color:#fff;background:linear-gradient(135deg,#ffb067 0%,#f47a1f 38%,#d9560a 72%,#a93f05 100%)}
+.ejl-brand::before,.ejl-brand::after{content:"";position:absolute;border-radius:50%;filter:blur(60px);pointer-events:none}
+.ejl-brand::before{width:520px;height:520px;left:-140px;top:-160px;background:rgba(255,255,255,.45);animation:ejl-drift 14s ease-in-out infinite alternate}
+.ejl-brand::after{width:560px;height:560px;right:-180px;bottom:-220px;background:rgba(110,26,0,.55);animation:ejl-drift 17s ease-in-out infinite alternate-reverse}
+.ejl-brand>*{position:relative;z-index:1}
+.ejl-deco{position:absolute!important;inset:0;z-index:0!important;pointer-events:none}
+.ejl-ring{position:absolute;border-radius:50%;border:1.5px solid rgba(255,255,255,.3)}
+.ejl-dots{position:absolute;left:40px;bottom:40px;width:150px;height:150px;opacity:.75;background-image:radial-gradient(rgba(255,255,255,.6) 1.6px,transparent 1.9px);background-size:20px 20px}
+.ejl-chip{position:absolute;display:inline-flex;align-items:center;gap:10px;padding:12px 18px;border-radius:999px;background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.5);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);font-weight:600;font-size:.9rem;color:#fff;box-shadow:0 20px 40px -22px rgba(70,20,0,.6)}
+.ejl-chip svg{flex:none}
+.ejl-float{animation:ejl-floatY 7s ease-in-out infinite}
+.ejl-float-b{animation-duration:9s;animation-delay:-3s}
+.ejl-badge{align-self:flex-start;display:inline-flex;background:#fff;border-radius:16px;padding:10px 18px;box-shadow:0 18px 40px -20px rgba(70,20,0,.6)}
+.ejl-badge .brand-logo{display:block;height:48px;width:auto;max-width:none}
+.ejl-brand-copy h2{margin:0 0 12px;font-size:clamp(2.6rem,4.6vw,4.2rem);line-height:1.02;letter-spacing:-.04em;font-weight:500;color:#fff}
+.ejl-brand-copy p{margin:0;max-width:24em;font-size:1.0625rem;line-height:1.6;color:rgba(255,255,255,.9)}
+.ejl-formside{position:relative;display:flex;flex-direction:column;justify-content:center;padding:72px clamp(24px,5vw,72px)}
+.ejl-inner{width:min(100%,460px);margin:0 auto}
+.ejl-back{position:absolute;top:28px;right:clamp(24px,5vw,72px);display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-weight:600;font-size:.9rem;text-decoration:none}
+.ejl-back svg{transform:rotate(180deg)}
+.ejl-back:hover{color:var(--o)}
+.ejl-eyebrow{display:block;margin:0 0 10px;font-size:.75rem;font-weight:700;letter-spacing:.12em;color:var(--o)}
+.ejl-inner h1{margin:0 0 10px;font-size:clamp(2rem,3.4vw,2.7rem);line-height:1.08;letter-spacing:-.035em;font-weight:500}
+.ejl-sub{margin:0 0 22px;color:#6e6055;line-height:1.55}
+.ejl-form{display:grid;gap:16px;margin-top:20px}
+.ejl-field{display:grid;gap:6px;font-size:.875rem;font-weight:600}
+.ejl-field input{width:100%;box-sizing:border-box;padding:13px 16px;border-radius:14px;border:1.5px solid var(--line);background:#fff;color:var(--ink);font:inherit;font-weight:400;transition:border-color .2s ease,box-shadow .2s ease}
+.ejl-field input::placeholder{color:#b3a79b}
+.ejl-field input:focus{outline:none;border-color:var(--o);box-shadow:0 0 0 4px rgba(232,101,10,.16)}
+.ejl-submit{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px 24px;border-radius:999px;border:1.5px solid var(--o);background:var(--o);color:#fff;font:inherit;font-weight:600;cursor:pointer;transition:transform .2s ease,background .2s ease}
+.ejl-submit:hover{transform:translateY(-2px);background:#d4570a}
+.ejl-submit:disabled{opacity:.55;cursor:not-allowed;transform:none}
+.ejl-submit:focus-visible,.ejl-field input:focus-visible,.ejl-back:focus-visible{outline:3px solid var(--o);outline-offset:3px}
+.ejl-note{margin:22px 0 0;font-size:.8125rem;line-height:1.5;color:var(--muted)}
+@keyframes ejl-floatY{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@keyframes ejl-drift{from{transform:translate(0,0) scale(1)}to{transform:translate(60px,40px) scale(1.12)}}
+@media (max-width:1000px){
+  .ejl-page{grid-template-columns:1fr}
+  .ejl-brand{min-height:0;gap:24px;padding:28px 24px 32px}
+  .ejl-deco{display:none}
+  .ejl-brand-copy h2{font-size:2.2rem}
+  .ejl-formside{padding:56px 24px 40px}
+  .ejl-back{top:20px;right:24px}
+}
+@media (prefers-reduced-motion:reduce){.ejl-brand::before,.ejl-brand::after,.ejl-float{animation:none!important}.ejl-submit{transition:none}}
+`;
+
+function ensureLoginStyles() {
+  if (typeof document === 'undefined' || document.getElementById('ejl-login-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'ejl-login-styles';
+  style.textContent = ADMIN_LOGIN_CSS;
+  document.head.appendChild(style);
+}
+
 export async function mountAdminTools(root, options = {}) {
   if (!root) return;
   const mountMarker = {};
@@ -281,8 +340,14 @@ export async function mountAdminTools(root, options = {}) {
     return null;
   }
   function loginPage() {
+    ensureLoginStyles();
     const feedback = state.pageError || state.error;
-    return `<div class="ej-admin-login-page"><a class="ej-admin-login-back" href="/" data-admin-link="/">${icon('arrow', 16)} Back to marketplace</a><section class="ej-admin-login-card"><aside class="ej-admin-login-visual"><div class="ej-admin-login-logo">${logo('ej-admin-logo')}</div><div><span class="ej-admin-eyebrow light">EMMYJOSH LOGS</span><h1>Operate with<br><em>confidence.</em></h1><p>Secure catalog, pricing, stock and import controls for the admin team.</p></div><span class="ej-admin-login-shield">${icon('lock', 32)}</span></aside><div class="ej-admin-login-form"><span class="ej-admin-eyebrow">SECURE ADMIN ACCESS</span><h2>Welcome back</h2><p>Use your configured admin credentials. This form never stores passwords in the browser.</p>${!setupReady ? `<div class="ej-admin-alert warning">${icon('warning', 17)}<span>Admin setup is not ready on the server. Bootstrap the backend before attempting login.</span></div>` : ''}${feedback ? `<div class="ej-admin-alert error" role="alert">${icon('warning', 17)}<span>${escapeHTML(feedback)}</span><button type="button" class="link-button" data-admin-action="${logoutRetry ? 'retry-logout' : 'retry-session'}">Retry</button></div>` : ''}<form data-admin-form="login" class="ej-admin-form"><label>Email address<input name="email" type="email" required autocomplete="username" placeholder="admin@example.com"></label><label>Password<input name="password" type="password" required autocomplete="current-password" minlength="12" placeholder="Your admin password"></label><button class="button" type="submit" ${!setupReady ? 'disabled' : ''}>Sign in to admin ${icon('arrow', 16)}</button></form><p class="ej-admin-login-note">Session cookies and CSRF tokens are supplied by the admin service. Do not use this form on shared computers.</p></div></section></div><div class="ej-admin-toast-slot" data-admin-toast aria-live="polite"></div>`;
+    const chips = [
+      ['box', 'Catalog & pricing', 'top:17%;right:7%', 'ejl-float'],
+      ['upload', 'Stock imports', 'top:37%;right:26%', 'ejl-float ejl-float-b'],
+      ['audit', 'Audit trail', 'top:56%;right:8%', 'ejl-float'],
+    ].map(([glyph, label, pos, cls]) => `<span class="ejl-chip ${cls}" style="${pos}">${icon(glyph, 18)}${escapeHTML(label)}</span>`).join('');
+    return `<div class="ejl-page"><aside class="ejl-brand"><div class="ejl-deco" aria-hidden="true"><i class="ejl-ring" style="width:560px;height:560px;right:-200px;top:60px"></i><i class="ejl-ring" style="width:380px;height:380px;right:-110px;top:150px"></i><i class="ejl-ring" style="width:200px;height:200px;right:-20px;top:240px"></i><i class="ejl-dots"></i>${chips}</div><a class="ejl-badge" href="/" data-admin-link="/" aria-label="Emmyjosh Logs home">${logo('ejl-logo')}</a><div class="ejl-brand-copy"><h2>Welcome back</h2><p>Secure catalog, pricing, stock and import controls for the admin team.</p></div></aside><section class="ejl-formside"><a class="ejl-back" href="/" data-admin-link="/">${icon('arrow', 16)} Back to marketplace</a><div class="ejl-inner"><span class="ejl-eyebrow">SECURE ADMIN ACCESS</span><h1>Admin sign in</h1><p class="ejl-sub">Use your configured admin credentials. This form never stores passwords in the browser.</p>${!setupReady ? `<div class="ej-admin-alert warning">${icon('warning', 17)}<span>Admin setup is not ready on the server. Bootstrap the backend before attempting login.</span></div>` : ''}${feedback ? `<div class="ej-admin-alert error" role="alert">${icon('warning', 17)}<span>${escapeHTML(feedback)}</span><button type="button" class="link-button" data-admin-action="${logoutRetry ? 'retry-logout' : 'retry-session'}">Retry</button></div>` : ''}<form data-admin-form="login" class="ejl-form"><label class="ejl-field">Email address<input name="email" type="email" required autocomplete="username" placeholder="admin@example.com"></label><label class="ejl-field">Password<input name="password" type="password" required autocomplete="current-password" minlength="12" placeholder="Your admin password"></label><button class="ejl-submit" type="submit" ${!setupReady ? 'disabled' : ''}>Sign in to admin ${icon('arrow', 16)}</button></form><p class="ejl-note">Session cookies and CSRF tokens are supplied by the admin service. Do not use this form on shared computers.</p></div></section></div><div class="ej-admin-toast-slot" data-admin-toast aria-live="polite"></div>`;
   }
   function header(kicker, title, description, action = '') { return `<div class="ej-admin-page-head"><div><span class="ej-admin-eyebrow">${escapeHTML(kicker)}</span><h1>${title}</h1>${description ? `<p>${escapeHTML(description)}</p>` : ''}</div>${action}</div>`; }
   function alertBox(message, tone = 'error', retry = false) { return `<div class="ej-admin-alert ${tone}" role="alert">${icon(tone === 'error' ? 'warning' : 'check', 17)}<span>${escapeHTML(message)}</span>${retry ? '<button type="button" class="link-button" data-admin-action="retry-page">Retry</button>' : ''}</div>`; }
