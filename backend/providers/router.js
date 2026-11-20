@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const { requireAuth } = require('../../legacy-api/src/middleware/auth');
 const { calculateRetail } = require('../crypto');
 const { config } = require('./config');
-const { createQuote, findQuote } = require('./quotes');
+const { createQuote, createQuotes, findQuote } = require('./quotes');
 const { ceilProviderToMinor, retailFromMarkup, asPositiveMinor, opaqueSelection } = require('./money');
 const { createDonAdapter } = require('./don');
 const { create5SimAdapter } = require('./fivesim');
@@ -203,17 +203,24 @@ async function buildDonQuotes(db, userId, adapter) {
   return output;
 }
 async function buildNumberQuotes(db, userId, number, adapter, item, query) {
-  const catalog = await adapter.catalog({ country: query.country, service: query.service }); const output = [];
+  const catalog = await adapter.catalog({ country: query.country, service: query.service });
+  // Price every raw quote first, then store them all with batched multi-row INSERTs
+  // instead of one database round trip per quote.
+  const inputs = [];
   for (const raw of catalog.quotes || []) {
     if (!raw.available) continue;
     let costMinor; try { costMinor = ceilProviderToMinor(raw.amount, item.rate); } catch { continue; }
     let retailMinor; try { retailMinor = retailFromMarkup(costMinor, item.markup); } catch { continue; }
     if (retailMinor < costMinor) continue;
     const selection = { country: String(raw.country), service: String(raw.service), operator: String(raw.operator || 'any'), name: String(raw.name || raw.service).slice(0, 160), providerAmount: String(raw.amount), available: true, count: Number(raw.count || 0) };
-    const quote = await createQuote(db, { userId, provider: providerName(number), kind: 'NUMBER', productId: numberProductId(number, selection), selection, costMinor, retailMinor, currency: 'NGN' });
-    output.push({ id: quote.quoteId, provider: number, providerLabel: item.label, country: selection.country, service: selection.service, operator: selection.operator, name: selection.name, priceMinor: String(retailMinor), currency: 'NGN', available: true });
-    if (output.length >= 2000) break;
+    inputs.push({ userId, provider: providerName(number), kind: 'NUMBER', productId: numberProductId(number, selection), selection, costMinor, retailMinor, currency: 'NGN' });
+    if (inputs.length >= 2000) break;
   }
+  const created = await createQuotes(db, inputs);
+  const output = created.map((quote, index) => {
+    const { selection, retailMinor } = inputs[index];
+    return { id: quote.quoteId, provider: number, providerLabel: item.label, country: selection.country, service: selection.service, operator: selection.operator, name: selection.name, priceMinor: String(retailMinor), currency: 'NGN', available: true };
+  });
   return { countries: catalog.countries || [], services: catalog.services || [], quotes: output };
 }
 async function dispatchNumber({ req, db, options, cfg, adapters, quote }) {
@@ -364,9 +371,16 @@ function createProviderRouter(options = {}) {
   router.use(cookieParser()); router.use(express.json({ limit: '100kb', strict: true })); router.use(requireAuth);
   router.get('/status', use(async (_req, res) => res.json(statusBody(cfg))));
   router.get('/numbers/catalog', use(async (req, res) => {
-    const number = safeProvider(req.query.provider); const item = providerReady(cfg, number); const result = await buildNumberQuotes(db, req.user.id, number, adapters[number], item, { country: req.query.country, service: req.query.service });
-    // List every ready provider so the provider dropdown can offer all of them, not just the one requested.
-    res.json({ providers: Object.values(cfg.providers).filter((p) => p.ready).map((p) => ({ provider: p.number, providerLabel: p.label })), countries: result.countries, services: result.services, quotes: result.quotes });
+    // Every ready provider is listed so the provider dropdown can offer all of them.
+    const ready = Object.values(cfg.providers).filter((p) => p.ready);
+    if (!ready.length) throw httpError(503, 'provider_disabled', 'No provider is enabled');
+    // If the requested provider is not ready (e.g. the frontend defaults to one that is
+    // not configured), fall back to the first ready provider instead of returning a bare 503.
+    const requested = safeProvider(req.query.provider);
+    const number = cfg.providers[requested]?.ready ? requested : ready[0].number;
+    const item = cfg.providers[number];
+    const result = await buildNumberQuotes(db, req.user.id, number, adapters[number], item, { country: req.query.country, service: req.query.service });
+    res.json({ provider: number, providers: ready.map((p) => ({ provider: p.number, providerLabel: p.label })), countries: result.countries, services: result.services, quotes: result.quotes });
   }));
   router.post('/numbers/orders', use(async (req, res) => {
     const key = idempotency(req); const replay = await existingExternalReplay(dbOf(db), req.user.id, key);

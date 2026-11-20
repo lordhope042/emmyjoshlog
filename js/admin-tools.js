@@ -492,24 +492,77 @@ export async function mountAdminTools(root, options = {}) {
     return shell(`${header('CHECKOUT', 'Checkout and refunds', 'Live commerce records with private details hidden. Refunds credit the customer wallet for the full original purchase amount; they are not bank refunds.', `<button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 14)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}${allRows.length ? orderFilters : ''}<section class="ej-admin-panel ej-admin-table-panel">${state.loading ? loadingBox() : rows.length ? `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>Amount</th><th>Updated</th><th></th></tr></thead><tbody>${rows.map((order) => `<tr><td><code>${escapeHTML(order.id || order.orderReference || '—')}</code></td><td>${escapeHTML(order.customerEmail || order.userEmail || 'Redacted')}</td><td><span class="ej-admin-status ${statusClass(order.status)}">${escapeHTML(order.status || '—')}</span></td><td>${minorMoneyLabel(order.totalMinor ?? order.amountMinor ?? order.total ?? '')}</td><td>${dateLabel(order.updatedAt || order.createdAt)}</td><td><button class="button button-small button-outline" type="button" data-admin-action="refund-order" data-id="${escapeHTML(order.id || '')}" ${['REFUNDED', 'CANCELLED'].includes(String(order.status).toUpperCase()) ? 'disabled' : ''}>Full wallet refund</button></td></tr>`).join('')}</tbody></table></div>` : emptyState('No commerce orders returned', 'No orders were returned. No demo balances or order counts are shown.', 'orders')}</section>`);
   }
 
-  function supplierPage() {
-    const status = state.supplierStatus || {};
-    const providers = Array.isArray(status.providers) ? status.providers : [];
-    const action = `<button class="button button-small" type="button" data-admin-action="supplier-sync">${icon('refresh', 14)} Sync catalog</button>`;
-    const providerContent = state.loading && !state.supplierStatus
-      ? loadingBox()
-      : providers.length
-        ? `<div class="ej-admin-provider-grid">${providers.map((provider) => {
-            const providerStatus = provider.status || (provider.enabled ? 'enabled' : 'disabled');
-            const providerLabel = provider.label || provider.name || provider.provider || 'Provider';
-            const message = provider.message || provider.currency || 'Status returned by provider configuration';
-            return `<article class="ej-admin-provider-card"><b>${escapeHTML(providerLabel)}</b><span class="ej-admin-status ${statusClass(providerStatus)}">${escapeHTML(provider.status || (provider.enabled ? 'Enabled' : 'Disabled'))}</span><small>${escapeHTML(message)}</small></article>`;
-          }).join('')}</div>`
-        : emptyState('Provider status unavailable', 'Provider keys or native currency/rate configuration may be missing. The frontend does not fabricate availability, prices, or supplier product counts.', 'warning');
-    const body = `<section class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">LIVE PROVIDER STATUS</span><h2>${providers.length ? 'Configured providers' : 'No provider status returned'}</h2></div><span class="ej-admin-lock-pill">${icon('lock', 13)} No invented counts</span></div>${providerContent}<p class="ej-admin-muted">Sync imports supplier catalogue details only. Choose a Don Log in Products to set its selling price and activate it individually. Supplier checkout remains separately controlled by the server.</p></section>`;
-    return shell(header('SUPPLIER OPERATIONS', 'Provider status', 'Inspect the provider connection and sync Don Logs. Set each product selling price and activate it directly from Products.', action) + (state.pageError ? alertBox(state.pageError, 'error', true) : '') + body);
-  }
-  function auditPage() {
+// Replace the existing supplierPage() function inside mountAdminTools() with this one.
+// It uses only helpers that already exist in that scope: icon, escapeHTML, state, header,
+// alertBox, loadingBox, emptyState, shell and statusClass. Nothing else in the file changes.
+//
+// It reads the real shape returned by GET /providers/status:
+//   { don: { enabled, configured, mode, modeValid, deliveryContractConfirmed, purchasesEnabled },
+//     providers: [{ provider, providerLabel, enabled, configured, quotesEnabled, purchasesEnabled, currency }] }
+function supplierPage() {
+  const status = state.supplierStatus || {};
+  const providers = Array.isArray(status.providers) ? status.providers : [];
+  const don = status.don && typeof status.don === 'object' ? status.don : null;
+  const action = `<button class="button button-small" type="button" data-admin-action="supplier-sync">${icon('refresh', 14)} Sync catalog</button>`;
+
+  const check = (ok, text) => `<li style="list-style:none;display:flex;align-items:center;gap:6px;margin:3px 0;color:${ok ? '#1a7f37' : '#b42318'}">${icon(ok ? 'check' : 'close', 14)}<span>${escapeHTML(text)}</span></li>`;
+  const card = (title, badge, tone, checks, hints, note) => `<article class="ej-admin-provider-card"><b>${escapeHTML(title)}</b><span class="ej-admin-status ${statusClass(tone)}">${escapeHTML(badge)}</span><ul style="margin:10px 0 0;padding:0">${checks.join('')}</ul>${hints.length ? `<small style="display:block;margin-top:8px">${hints.map((hint) => escapeHTML(hint)).join('<br>')}</small>` : ''}${note ? `<small style="display:block;margin-top:6px">${escapeHTML(note)}</small>` : ''}</article>`;
+
+  const providerCards = providers.map((provider) => {
+    const number = provider.provider ?? '';
+    const label = provider.providerLabel || provider.label || provider.name || `Provider ${number}`;
+    const enabled = Boolean(provider.enabled);
+    const configured = Boolean(provider.configured);
+    const quotes = Boolean(provider.quotesEnabled);
+    const purchases = Boolean(provider.purchasesEnabled);
+    const badge = purchases ? 'Ready to sell' : quotes ? 'Quotes only' : enabled ? 'Not configured' : 'Disabled';
+    const tone = purchases ? 'completed' : quotes ? 'pending' : 'failed';
+    const hints = [];
+    if (!enabled) hints.push(`Set PROVIDER${number}_ENABLED to true.`);
+    if (!configured) hints.push('Set the API key, currency, NGN rate, and retail markup mode and value.');
+    if (enabled && configured && !purchases) hints.push(`Set PROVIDER${number}_PURCHASES_ENABLED to true to allow orders.`);
+    return card(
+      label,
+      badge,
+      tone,
+      [
+        check(enabled, 'Enabled'),
+        check(configured, 'Key, currency, rate and markup set'),
+        check(quotes, 'Quotes available to customers'),
+        check(purchases, 'Purchases enabled'),
+      ],
+      hints,
+      provider.currency ? `Provider currency: ${provider.currency}` : '',
+    );
+  });
+
+  const donCard = don
+    ? [card(
+      'Donmarketplace Logs',
+      don.purchasesEnabled ? 'Purchases on' : don.enabled ? 'Catalogue only' : 'Disabled',
+      don.purchasesEnabled ? 'completed' : don.enabled ? 'pending' : 'failed',
+      [
+        check(Boolean(don.enabled), 'Enabled'),
+        check(Boolean(don.configured), 'API key configured'),
+        check(Boolean(don.modeValid), `Mode: ${don.mode || 'unknown'}`),
+        check(Boolean(don.deliveryContractConfirmed), 'Delivery contract confirmed'),
+        check(Boolean(don.purchasesEnabled), 'Purchases enabled'),
+      ],
+      [],
+      'Live mode is catalogue-only. Supplier checkout runs in sandbox mode only.',
+    )]
+    : [];
+
+  const cards = [...providerCards, ...donCard];
+  const providerContent = state.loading && !state.supplierStatus
+    ? loadingBox()
+    : cards.length
+      ? `<div class="ej-admin-provider-grid">${cards.join('')}</div>`
+      : emptyState('Provider status unavailable', 'Provider keys or native currency/rate configuration may be missing. The frontend does not fabricate availability, prices, or supplier product counts.', 'warning');
+
+  const body = `<section class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">LIVE PROVIDER STATUS</span><h2>${cards.length ? 'Provider readiness' : 'No provider status returned'}</h2></div><span class="ej-admin-lock-pill">${icon('lock', 13)} No invented counts</span></div>${providerContent}<p class="ej-admin-muted">A provider shows customer quotes only when it is Enabled and fully configured. Orders also need Purchases enabled. Sync imports supplier catalogue details only. Choose a Don Log in Products to set its selling price and activate it individually. Supplier checkout remains separately controlled by the server.</p></section>`;
+  return shell(header('SUPPLIER OPERATIONS', 'Provider status', 'Inspect each provider connection and sync Don Logs. Set each product selling price and activate it directly from Products.', action) + (state.pageError ? alertBox(state.pageError, 'error', true) : '') + body);
+} function auditPage() {
     return shell(`${header('ACCOUNTABILITY', 'Audit logs', 'Redacted operational events from the admin service. Credential values and ciphertext are never returned.', `<button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 15)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}<section class="ej-admin-panel ej-admin-table-panel">${state.loading ? loadingBox() : state.audits.length ? `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Target</th><th>Safe detail</th></tr></thead><tbody>${state.audits.map((event) => `<tr><td>${dateLabel(event.createdAt)}</td><td><span class="ej-admin-status">${escapeHTML(event.action)}</span></td><td>${escapeHTML(event.actorEmail || '—')}</td><td><code>${escapeHTML(event.targetId || '—')}</code></td><td>${escapeHTML(typeof event.detail === 'string' ? event.detail : JSON.stringify(event.detail || {}))}</td></tr>`).join('')}</tbody></table></div>` : emptyState('No audit events returned', 'The server has not returned any redacted events for this account.', 'audit')}</section>`);
   }
   function page() {

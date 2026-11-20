@@ -12,6 +12,11 @@ const FALLBACK_NAMES = {
   oi: 'Tinder', nf: 'Netflix', ub: 'Uber', ot: 'Any other',
 };
 
+// The services and countries lists almost never change, so they are cached in memory.
+// This removes two upstream calls from every catalog request.
+const LIST_TTL_MS = 15 * 60 * 1000;
+const PRICES_TIMEOUT_MS = 10000;
+
 function ensureValue(value, field, max = 100) {
   const text = String(value ?? '');
   if (!text || text.length > max || !/^[A-Za-z0-9._:-]+$/.test(text)) throw new Error(`${field} is invalid`);
@@ -198,22 +203,58 @@ function createSMSBowerAdapter({ envConfig, fetchImpl, timeoutMs = 15000 } = {})
     return ensureOk(response);
   };
 
+  // Per-adapter cache. `inflight` makes simultaneous requests share one upstream fetch.
+  const listCache = { at: 0, services: null, countries: null, inflight: null };
+
+  async function loadLists() {
+    if (listCache.services && listCache.countries && Date.now() - listCache.at < LIST_TTL_MS) return listCache;
+    if (listCache.inflight) return listCache.inflight;
+
+    listCache.inflight = (async () => {
+      try {
+        const [servicesRaw, countriesRaw] = await Promise.all([
+          call({ action: 'getServicesList' }),
+          call({ action: 'getCountries' }),
+        ]);
+        listCache.services = normalizeServices(parseJson(servicesRaw, 'getServicesList'));
+        listCache.countries = normalizeCountries(parseJson(countriesRaw, 'getCountries')).slice(0, 250);
+        listCache.at = Date.now();
+        return listCache;
+      } catch (error) {
+        // If SMSBower is slow or down, serve the last good lists rather than failing the dropdowns.
+        if (listCache.services && listCache.countries) {
+          console.error('[SMSBower]', JSON.stringify({
+            event: 'smsbower_list_refresh_failed_using_stale',
+            code: error.code || 'unknown',
+          }));
+          return listCache;
+        }
+        throw error;
+      } finally {
+        listCache.inflight = null;
+      }
+    })();
+
+    return listCache.inflight;
+  }
+
   return {
     async catalog({ country, service } = {}) {
-      const [servicesRaw, countriesRaw] = await Promise.all([
-        call({ action: 'getServicesList' }),
-        call({ action: 'getCountries' }),
-      ]);
-      const allServices = normalizeServices(parseJson(servicesRaw, 'getServicesList'));
-      const countries = normalizeCountries(parseJson(countriesRaw, 'getCountries')).slice(0, 250);
+      const { services: allServices, countries } = await loadLists();
       const names = new Map(allServices.map((item) => [item.code, item.name]));
+      const services = allServices.slice(0, 250);
 
-      // An unfiltered price call covers every country and service and can exceed the
-      // transport's response limit, so prices are only fetched once a filter is chosen.
-      if (!country && !service) return { countries, services: allServices.slice(0, 250), quotes: [] };
+      // Nothing chosen, or a country chosen without a service: return the cached lists immediately.
+      // Prices are only fetched once a service is chosen, which keeps the call small and fast.
+      // (A country-only getPricesV2 returns every service and tier for that country: very large and slow.)
+      if (!service) return { countries, services, quotes: [] };
 
       // getPricesV2 lists every price tier, not just one price per country.
-      const prices = parseJson(await call({ action: 'getPricesV2', country, service }), 'getPricesV2');
+      const prices = parseJson(
+        await call({ action: 'getPricesV2', country, service }, PRICES_TIMEOUT_MS),
+        'getPricesV2',
+      );
+
       const byCountry = {};
       if (country) {
         const nested = isRecord(prices) ? prices[String(country)] : undefined;
@@ -223,17 +264,15 @@ function createSMSBowerAdapter({ envConfig, fetchImpl, timeoutMs = 15000 } = {})
       }
 
       const quotes = [];
-      const available = new Map();
       outer:
       for (const [countryKey, serviceRows] of Object.entries(byCountry)) {
         if (!isRecord(serviceRows)) continue;
         for (const [serviceKey, info] of Object.entries(serviceRows)) {
-          if (service && serviceKey !== String(service)) continue;
+          if (serviceKey !== String(service)) continue;
           // Only tiers with stock are offered, cheapest first: "Grade 1" is the cheapest.
           const inStock = tiersOf(info).filter((tier) => tier.count > 0);
           if (inStock.length === 0) continue;
           const name = serviceName(serviceKey, names);
-          available.set(serviceKey, name);
           inStock.forEach((tier, index) => {
             quotes.push({
               country: countryKey,
@@ -251,12 +290,6 @@ function createSMSBowerAdapter({ envConfig, fetchImpl, timeoutMs = 15000 } = {})
         }
       }
 
-      // With a country chosen, the service list is the services available in that country.
-      // If the country has nothing in stock (or the id was not one SMSBower knows), fall back to
-      // the full list so the service dropdown is never left empty.
-      const services = service || available.size === 0
-        ? allServices.slice(0, 250)
-        : [...available.entries()].map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name));
       return { countries, services, quotes: quotes.slice(0, 2000) };
     },
 
