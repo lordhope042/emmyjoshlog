@@ -172,8 +172,45 @@ function ensureLoginStyles() {
   document.head.appendChild(style);
 }
 
+// The admin shell (sidebar, top bar, tables, drawers) is styled by admin-tools.css. If the page did
+// not link that file, or the link failed to load, add it from here. Candidates are tried in order:
+// next to this script first, then common site folders. A server that answers a missing file with
+// the HTML page is treated as a failure, so the next candidate is tried.
+function ensureAdminStyles() {
+  if (typeof document === 'undefined') return Promise.resolve();
+  const alreadyLoaded = [...document.styleSheets].some((sheet) => sheet.href && sheet.href.includes('admin-tools'));
+  if (alreadyLoaded || document.getElementById('ej-admin-tools-css')) return Promise.resolve();
+
+  const candidates = [
+    new URL('./admin-tools.css', import.meta.url).href,
+    '/admin-tools.css',
+    '/css/admin-tools.css',
+    '/assets/admin-tools.css',
+    '/styles/admin-tools.css',
+  ];
+
+  return new Promise((resolve) => {
+    let index = 0;
+    const timer = setTimeout(resolve, 4000); // never block the page on a slow stylesheet
+    const finish = () => { clearTimeout(timer); resolve(); };
+    const tryNext = () => {
+      if (index >= candidates.length) { finish(); return; }
+      const link = document.createElement('link');
+      link.id = 'ej-admin-tools-css';
+      link.rel = 'stylesheet';
+      link.href = candidates[index];
+      index += 1;
+      link.onload = finish;
+      link.onerror = () => { link.remove(); tryNext(); };
+      document.head.appendChild(link);
+    };
+    tryNext();
+  });
+}
+
 export async function mountAdminTools(root, options = {}) {
   if (!root) return;
+  await ensureAdminStyles();
   const mountMarker = {};
   root.__adminToolsMount = mountMarker;
   const escapeHTML = options.escapeHTML || localEscape;
@@ -434,7 +471,7 @@ export async function mountAdminTools(root, options = {}) {
     if (group === 'MAIL') return `<label>Mail platforms</label>${socialChoices('platforms',[['GMAIL','Gmail'],['OUTLOOK','Outlook'],['MAIL','Mail']],true)}`;
     if (group === 'TWITTER') return `<label>Follower tier</label><select name="followers"><option value="0">Empty Aged</option><option value="100">100+</option><option value="200">200+</option><option value="500">500+</option></select>`;
     if (group === 'OTHER') return `<div class="ej-admin-form-grid"><label>Platform<select name="platform" required>${optionList(['OTHER','SNAPCHAT','DISCORD','REDDIT','LINKEDIN','YOUTUBE','INSTAGRAM','FACEBOOK','TIKTOK','X','TELEGRAM'])}</select></label><label>Category<select name="category" required>${optionList(['TELEGRAM_ACCOUNT','FACEBOOK_COUNTRY'])}</select></label></div>`;
-    if (group === 'FORMAT') return `<div class="ej-format-config"><div class="ej-admin-form-grid"><label>Platform<select name="formatPlatform" required>${optionList(['OTHER','INSTAGRAM','FACEBOOK','TIKTOK','X','SNAPCHAT','TELEGRAM','DISCORD','REDDIT','LINKEDIN','YOUTUBE','GMAIL','OUTLOOK','MAIL','VPN','TEXTPLUS','NEXTPLUS','ICLOUD','TOOL'])}</select><small>Choose the closest platform, or OTHER for a general format.</small></label><label>Format name<input name="formatName" required maxlength=160 placeholder="e.g. Facebook Ads Account Format"></label></div><div class="ej-format-type-wrap"><span class="ej-format-label">What are you submitting?</span><div class="ej-format-type-grid"><label class="ej-format-type-card selected"><input type="radio" name="formatType" value="WRITEUP" checked><span class="ej-format-type-icon">Aa</span><span><b>Write-up</b><small>Text content, instructions or a format description</small></span></label><label class="ej-format-type-card"><input type="radio" name="formatType" value="CREDENTIALS"><span class="ej-format-type-icon">•••</span><span><b>Credentials</b><small>Private login details or sensitive account data</small></span></label></div></div><div class="ej-format-content" data-format-panel="WRITEUP"><label>Write-up content<textarea name="formatWriteup" rows="7" maxlength="2000" required placeholder="Write the format content customers should receive..."></textarea><small>Private buyer-only content. Customers receive it only after a successful purchase.</small></label></div><div class="ej-format-content" data-format-panel="CREDENTIALS" hidden><label>Credential details<textarea name="formatCredentials" rows="7" maxlength="20000" placeholder="Enter the private format or account details..." autocomplete="off"></textarea><small class="ej-format-security-note">Private buyer-only content. Encrypted and released only after a successful purchase.</small></label></div></div>`;
+    if (group === 'FORMAT') return `<div class="ej-format-config"><div class="ej-admin-form-grid"><label>Platform<select name="formatPlatform" required>${optionList(['OTHER','INSTAGRAM','FACEBOOK','TIKTOK','X','SNAPCHAT','TELEGRAM','DISCORD','REDDIT','LINKEDIN','YOUTUBE','GMAIL','OUTLOOK','MAIL','VPN','TEXTPLUS','NEXTPLUS','ICLOUD','TOOL'])}</select><small>Choose the closest platform, or OTHER for a general format.</small></label><label>Format name<input name="formatName" required maxlength=160 placeholder="e.g. Facebook Ads Account Format"></label></div><div class="ej-format-type-wrap"><span class="ej-format-label">What are you submitting?</span><div class="ej-format-type-grid"><label class="ej-format-type-card selected"><input type="radio" name="formatType" value="WRITEUP" checked><span class="ej-format-type-icon">Aa</span><span><b>Write-up</b><small>Text content, instructions or a format description</small></span></label><label class="ej-format-type-card"><input type="radio" name="formatType" value="CREDENTIALS"><span class="ej-format-type-icon">•••</span><span><b>Credentials</b><small>Private login details or sensitive account data</small></span></label></div></div><div class="ej-format-content" data-format-panel="WRITEUP"><label>Write-up content<textarea name="formatWriteup" rows="7" maxlength="20000" required placeholder="Write the format content customers should receive..."></textarea><small>Private buyer-only content. Customers receive it only after a successful purchase.</small></label></div><div class="ej-format-content" data-format-panel="CREDENTIALS" hidden><label>Credential details<textarea name="formatCredentials" rows="7" maxlength="20000" placeholder="Enter the private format or account details..." autocomplete="off"></textarea><small class="ej-format-security-note">Private buyer-only content. Encrypted and released only after a successful purchase.</small></label></div></div>`;
     return `<p class="ej-admin-field-help">Telegram account listing.</p>`;
   }
   function socialWizardDrawer() {
@@ -442,7 +479,7 @@ export async function mountAdminTools(root, options = {}) {
     const formatMode = group === 'FORMAT';
     const title = SOCIAL_GROUPS.find(x => x[0] === group)?.[1] || 'SocialLog details';
     if (state.socialStep === 1) return `<div class="ej-admin-drawer-backdrop" data-admin-action="close-drawer"><aside class="ej-admin-drawer ej-social-wizard" data-admin-drawer role="dialog" aria-modal="true" aria-labelledby="social-title"><div class="ej-social-wizard-top"><div><span class="ej-admin-eyebrow">MY SOCIALLOGS · CREATE LISTING</span><h2 id="social-title">What are you adding?</h2><p class="ej-admin-muted">Choose a category to load the right listing fields. You can create up to 25 variants in one submission.</p></div><button class="ej-admin-icon-button" type="button" data-admin-action="close-drawer" aria-label="Close">${icon('close',20)}</button></div><div class="ej-social-step-track"><span class="active">01 <b>Category</b></span><i></i><span>02 <b>Details</b></span></div><div class="ej-social-group-grid">${SOCIAL_GROUPS.map(([value,label]) => `<button type="button" class="ej-social-group-card ${group===value?'selected':''}" data-admin-action="social-group" data-group="${value}" aria-pressed="${group===value}"><span class="ej-social-card-mark">${value==='FORMAT'?'Aa':value.slice(0,2)}</span><span class="ej-social-card-copy"><b>${escapeHTML(label)}</b><small>${value==='FORMAT'?'Custom write-ups or secure credential formats':value==='OTHER'?'Other supported social account listings':'Create a '+label+' listing'}</small></span><span class="ej-social-card-arrow">${icon('arrow',15)}</span></button>`).join('')}</div><div class="ej-admin-drawer-actions ej-social-actions"><button type="button" class="button button-outline" data-admin-action="close-drawer">Cancel</button><button type="button" class="button" data-admin-action="social-next" ${group?'':'disabled'}>Continue ${icon('arrow',15)}</button></div></aside></div>`;
-    return `<div class="ej-admin-drawer-backdrop" data-admin-action="close-drawer"><aside class="ej-admin-drawer ej-social-wizard ej-social-wizard-details" data-admin-drawer role="dialog" aria-modal="true" aria-labelledby="social-title"><div class="ej-social-wizard-top"><div><span class="ej-admin-eyebrow">MY SOCIALLOGS · CREATE LISTING</span><h2 id="social-title">${escapeHTML(title)}</h2><p class="ej-admin-muted">Add the listing information and set your own selling price.</p></div><button class="ej-admin-icon-button" type="button" data-admin-action="close-drawer" aria-label="Close">${icon('close',20)}</button></div><div class="ej-social-step-track"><span class="complete">01 <b>Category</b></span><i class="complete"></i><span class="active">02 <b>Details</b></span></div><form class="ej-admin-form ej-social-form" data-admin-form="social">${formatMode ? `<section class="ej-social-section ej-social-format-section"><div class="ej-social-section-heading"><div><span class="ej-admin-eyebrow">CUSTOM FORMAT</span><h3>Format setup</h3><p>Define the format and decide whether its content is public or private.</p></div><span class="ej-social-section-index">01</span></div>${socialVariantFields(group)}</section>` : `<section class="ej-social-section"><div class="ej-social-section-heading"><div><span class="ej-admin-eyebrow">01 · CONFIGURATION</span><h3>Listing options</h3></div></div>${socialVariantFields(group)}</section>`}<section class="ej-social-section"><div class="ej-social-section-heading"><div><span class="ej-admin-eyebrow">${formatMode?'02':'02'} · LISTING'}</span><h3>${formatMode?'Pricing & presentation':'Product details'}</h3><p>${formatMode?'Set the customer-facing price and optional listing image.':'Add the listing label, age, price and customer-facing details.'}</p></div><span class="ej-social-section-index">${formatMode?'02':'02'}</span></div><div class="ej-admin-form-grid"><label>${formatMode?'Listing label':'Username / listing label'}<input name="username" ${formatMode?'':'required'} maxlength="160" placeholder="${formatMode?'Optional short display label':'Enter username or listing label'}"></label>${formatMode?'':`<label>Age (months)<input name="age" type="number" min="1" max="1200" ${group==='WORKING_TOOLS'?'disabled value="0"':'required'} placeholder="e.g. 6"></label>`}<label>Your selling price (₦)<input name="price" required inputmode="decimal" placeholder="Enter selling price"></label>${formatMode?'':`<label>Country<input name="country" maxlength="80" placeholder="Required for TikTok country"></label>`}<label>Image URL<input name="image" type="url" placeholder="https://..."></label></div>${formatMode?`<p class="ej-admin-field-help">The format name becomes the product title. The selected content type determines where its text is stored.</p>`:`<label>Description<textarea name="description" rows="3" maxlength="2000" placeholder="Add a short customer-facing description..."></textarea></label><div class="ej-social-flags">${[['emailAttached','Email attached'],['phoneAttached','Phone attached'],['twoFactor','2FA enabled'],['ogEmail','Original email'],['verified','Verified']].map(([n,l])=>`<label class="check-label"><input type="checkbox" name="${n}"><span>${l}</span></label>`).join('')}</div>`}</section>${formatMode?'':`<section class="ej-social-section"><div class="ej-social-section-heading"><div><span class="ej-admin-eyebrow">03 · FULFILMENT</span><h3>Private account details</h3><p>These fields are encrypted and only used when fulfilling an order.</p></div><span class="ej-social-section-index">03</span></div><div class="ej-admin-form-grid"><label>Login username<input name="loginUsername" autocomplete="off"></label><label>Login email<input name="loginEmail" type="email" autocomplete="off"></label><label>Email password<input name="emailPassword" type="password" autocomplete="new-password"></label><label>Account password<input name="accountPassword" type="password" autocomplete="new-password"></label><label>2FA secret<input name="twoFactorSecret" autocomplete="off"></label><label>Recovery email<input name="recoveryEmail" type="email" autocomplete="off"></label><label>Recovery password<input name="recoveryPassword" type="password" autocomplete="new-password"></label></div><label>Backup codes <small>Separate with commas</small><textarea name="backupCodes" rows="2"></textarea></label><label>Cookies JSON<textarea name="cookies" rows="3" spellcheck="false" placeholder='{"session":"..."}'></textarea></label><label>Private notes <small>Admin-only; not included in buyer delivery</small><textarea name="notes" rows="2"></textarea></label></section>`}<div class="ej-admin-drawer-actions ej-social-actions"><button type="button" class="button button-outline" data-admin-action="social-back">Back</button><button type="submit" class="button" ${busy?'disabled':''}>Create SocialLog ${icon('check',15)}</button></div></form></aside></div>`;
+    return `<div class="ej-admin-drawer-backdrop" data-admin-action="close-drawer"><aside class="ej-admin-drawer ej-social-wizard ej-social-wizard-details" data-admin-drawer role="dialog" aria-modal="true" aria-labelledby="social-title"><div class="ej-social-wizard-top"><div><span class="ej-admin-eyebrow">MY SOCIALLOGS · CREATE LISTING</span><h2 id="social-title">${escapeHTML(title)}</h2><p class="ej-admin-muted">Add the listing information and set your own selling price.</p></div><button class="ej-admin-icon-button" type="button" data-admin-action="close-drawer" aria-label="Close">${icon('close',20)}</button></div><div class="ej-social-step-track"><span class="complete">01 <b>Category</b></span><i class="complete"></i><span class="active">02 <b>Details</b></span></div><form class="ej-admin-form ej-social-form" data-admin-form="social">${formatMode ? `<section class="ej-social-section ej-social-format-section"><div class="ej-social-section-heading"><div><span class="ej-admin-eyebrow">CUSTOM FORMAT</span><h3>Format setup</h3><p>Define the format and decide whether its content is public or private.</p></div><span class="ej-social-section-index">01</span></div>${socialVariantFields(group)}</section>` : `<section class="ej-social-section"><div class="ej-social-section-heading"><div><span class="ej-admin-eyebrow">01 · CONFIGURATION</span><h3>Listing options</h3></div></div>${socialVariantFields(group)}</section>`}<section class="ej-social-section"><div class="ej-social-section-heading"><div><span class="ej-admin-eyebrow">02 · LISTING</span><h3>${formatMode?'Pricing & presentation':'Product details'}</h3><p>${formatMode?'Set the customer-facing price and optional listing image.':'Add the listing label, age, price and customer-facing details.'}</p></div><span class="ej-social-section-index">02</span></div><div class="ej-admin-form-grid"><label>${formatMode?'Listing label':'Username / listing label'}<input name="username" ${formatMode?'':'required'} maxlength="160" placeholder="${formatMode?'Optional short display label':'Enter username or listing label'}"></label>${formatMode?'':`<label>Age (months)<input name="age" type="number" min="1" max="1200" ${group==='WORKING_TOOLS'?'disabled value="0"':'required'} placeholder="e.g. 6"></label>`}<label>Your selling price (₦)<input name="price" required inputmode="decimal" placeholder="Enter selling price"></label>${formatMode?'':`<label>Country<input name="country" maxlength="80" placeholder="Required for TikTok country"></label>`}<label>Image URL<input name="image" type="url" placeholder="https://..."></label></div>${formatMode?`<p class="ej-admin-field-help">The format name becomes the product title. The selected content type determines where its text is stored.</p>`:`<label>Description<textarea name="description" rows="3" maxlength="2000" placeholder="Add a short customer-facing description..."></textarea></label><div class="ej-social-flags">${[['emailAttached','Email attached'],['phoneAttached','Phone attached'],['twoFactor','2FA enabled'],['ogEmail','Original email'],['verified','Verified']].map(([n,l])=>`<label class="check-label"><input type="checkbox" name="${n}"><span>${l}</span></label>`).join('')}</div>`}</section>${formatMode?'':`<section class="ej-social-section"><div class="ej-social-section-heading"><div><span class="ej-admin-eyebrow">03 · FULFILMENT</span><h3>Private account details</h3><p>These fields are encrypted and only used when fulfilling an order.</p></div><span class="ej-social-section-index">03</span></div><div class="ej-admin-form-grid"><label>Login username<input name="loginUsername" autocomplete="off"></label><label>Login email<input name="loginEmail" type="email" autocomplete="off"></label><label>Email password<input name="emailPassword" type="password" autocomplete="new-password"></label><label>Account password<input name="accountPassword" type="password" autocomplete="new-password"></label><label>2FA secret<input name="twoFactorSecret" autocomplete="off"></label><label>Recovery email<input name="recoveryEmail" type="email" autocomplete="off"></label><label>Recovery password<input name="recoveryPassword" type="password" autocomplete="new-password"></label></div><label>Backup codes <small>Separate with commas</small><textarea name="backupCodes" rows="2"></textarea></label><label>Cookies JSON<textarea name="cookies" rows="3" spellcheck="false" placeholder='{"session":"..."}'></textarea></label><label>Private notes <small>Admin-only; not included in buyer delivery</small><textarea name="notes" rows="2"></textarea></label></section>`}<div class="ej-admin-drawer-actions ej-social-actions"><button type="button" class="button button-outline" data-admin-action="social-back">Back</button><button type="submit" class="button" ${busy?'disabled':''}>Create SocialLog ${icon('check',15)}</button></div></form></aside></div>`;
   }
 
   function productDrawer() {
@@ -492,77 +529,74 @@ export async function mountAdminTools(root, options = {}) {
     return shell(`${header('CHECKOUT', 'Checkout and refunds', 'Live commerce records with private details hidden. Refunds credit the customer wallet for the full original purchase amount; they are not bank refunds.', `<button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 14)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}${allRows.length ? orderFilters : ''}<section class="ej-admin-panel ej-admin-table-panel">${state.loading ? loadingBox() : rows.length ? `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>Amount</th><th>Updated</th><th></th></tr></thead><tbody>${rows.map((order) => `<tr><td><code>${escapeHTML(order.id || order.orderReference || '—')}</code></td><td>${escapeHTML(order.customerEmail || order.userEmail || 'Redacted')}</td><td><span class="ej-admin-status ${statusClass(order.status)}">${escapeHTML(order.status || '—')}</span></td><td>${minorMoneyLabel(order.totalMinor ?? order.amountMinor ?? order.total ?? '')}</td><td>${dateLabel(order.updatedAt || order.createdAt)}</td><td><button class="button button-small button-outline" type="button" data-admin-action="refund-order" data-id="${escapeHTML(order.id || '')}" ${['REFUNDED', 'CANCELLED'].includes(String(order.status).toUpperCase()) ? 'disabled' : ''}>Full wallet refund</button></td></tr>`).join('')}</tbody></table></div>` : emptyState('No commerce orders returned', 'No orders were returned. No demo balances or order counts are shown.', 'orders')}</section>`);
   }
 
-// Replace the existing supplierPage() function inside mountAdminTools() with this one.
-// It uses only helpers that already exist in that scope: icon, escapeHTML, state, header,
-// alertBox, loadingBox, emptyState, shell and statusClass. Nothing else in the file changes.
-//
-// It reads the real shape returned by GET /providers/status:
-//   { don: { enabled, configured, mode, modeValid, deliveryContractConfirmed, purchasesEnabled },
-//     providers: [{ provider, providerLabel, enabled, configured, quotesEnabled, purchasesEnabled, currency }] }
-function supplierPage() {
-  const status = state.supplierStatus || {};
-  const providers = Array.isArray(status.providers) ? status.providers : [];
-  const don = status.don && typeof status.don === 'object' ? status.don : null;
-  const action = `<button class="button button-small" type="button" data-admin-action="supplier-sync">${icon('refresh', 14)} Sync catalog</button>`;
+  // Reads the real shape returned by GET /providers/status:
+  //   { don: { enabled, configured, mode, modeValid, deliveryContractConfirmed, purchasesEnabled },
+  //     providers: [{ provider, providerLabel, enabled, configured, quotesEnabled, purchasesEnabled, currency }] }
+  function supplierPage() {
+    const status = state.supplierStatus || {};
+    const providers = Array.isArray(status.providers) ? status.providers : [];
+    const don = status.don && typeof status.don === 'object' ? status.don : null;
+    const action = `<button class="button button-small" type="button" data-admin-action="supplier-sync">${icon('refresh', 14)} Sync catalog</button>`;
 
-  const check = (ok, text) => `<li style="list-style:none;display:flex;align-items:center;gap:6px;margin:3px 0;color:${ok ? '#1a7f37' : '#b42318'}">${icon(ok ? 'check' : 'close', 14)}<span>${escapeHTML(text)}</span></li>`;
-  const card = (title, badge, tone, checks, hints, note) => `<article class="ej-admin-provider-card"><b>${escapeHTML(title)}</b><span class="ej-admin-status ${statusClass(tone)}">${escapeHTML(badge)}</span><ul style="margin:10px 0 0;padding:0">${checks.join('')}</ul>${hints.length ? `<small style="display:block;margin-top:8px">${hints.map((hint) => escapeHTML(hint)).join('<br>')}</small>` : ''}${note ? `<small style="display:block;margin-top:6px">${escapeHTML(note)}</small>` : ''}</article>`;
+    const check = (ok, text) => `<li style="list-style:none;display:flex;align-items:center;gap:6px;margin:3px 0;color:${ok ? '#1a7f37' : '#b42318'}">${icon(ok ? 'check' : 'close', 14)}<span>${escapeHTML(text)}</span></li>`;
+    const card = (title, badge, tone, checks, hints, note) => `<article class="ej-admin-provider-card"><b>${escapeHTML(title)}</b><span class="ej-admin-status ${statusClass(tone)}">${escapeHTML(badge)}</span><ul style="margin:10px 0 0;padding:0">${checks.join('')}</ul>${hints.length ? `<small style="display:block;margin-top:8px">${hints.map((hint) => escapeHTML(hint)).join('<br>')}</small>` : ''}${note ? `<small style="display:block;margin-top:6px">${escapeHTML(note)}</small>` : ''}</article>`;
 
-  const providerCards = providers.map((provider) => {
-    const number = provider.provider ?? '';
-    const label = provider.providerLabel || provider.label || provider.name || `Provider ${number}`;
-    const enabled = Boolean(provider.enabled);
-    const configured = Boolean(provider.configured);
-    const quotes = Boolean(provider.quotesEnabled);
-    const purchases = Boolean(provider.purchasesEnabled);
-    const badge = purchases ? 'Ready to sell' : quotes ? 'Quotes only' : enabled ? 'Not configured' : 'Disabled';
-    const tone = purchases ? 'completed' : quotes ? 'pending' : 'failed';
-    const hints = [];
-    if (!enabled) hints.push(`Set PROVIDER${number}_ENABLED to true.`);
-    if (!configured) hints.push('Set the API key, currency, NGN rate, and retail markup mode and value.');
-    if (enabled && configured && !purchases) hints.push(`Set PROVIDER${number}_PURCHASES_ENABLED to true to allow orders.`);
-    return card(
-      label,
-      badge,
-      tone,
-      [
-        check(enabled, 'Enabled'),
-        check(configured, 'Key, currency, rate and markup set'),
-        check(quotes, 'Quotes available to customers'),
-        check(purchases, 'Purchases enabled'),
-      ],
-      hints,
-      provider.currency ? `Provider currency: ${provider.currency}` : '',
-    );
-  });
+    const providerCards = providers.map((provider) => {
+      const number = provider.provider ?? '';
+      const label = provider.providerLabel || provider.label || provider.name || `Provider ${number}`;
+      const enabled = Boolean(provider.enabled);
+      const configured = Boolean(provider.configured);
+      const quotes = Boolean(provider.quotesEnabled);
+      const purchases = Boolean(provider.purchasesEnabled);
+      const badge = purchases ? 'Ready to sell' : quotes ? 'Quotes only' : enabled ? 'Not configured' : 'Disabled';
+      const tone = purchases ? 'completed' : quotes ? 'pending' : 'failed';
+      const hints = [];
+      if (!enabled) hints.push(`Set PROVIDER${number}_ENABLED to true.`);
+      if (!configured) hints.push('Set the API key, currency, NGN rate, and retail markup mode and value.');
+      if (enabled && configured && !purchases) hints.push(`Set PROVIDER${number}_PURCHASES_ENABLED to true to allow orders.`);
+      return card(
+        label,
+        badge,
+        tone,
+        [
+          check(enabled, 'Enabled'),
+          check(configured, 'Key, currency, rate and markup set'),
+          check(quotes, 'Quotes available to customers'),
+          check(purchases, 'Purchases enabled'),
+        ],
+        hints,
+        provider.currency ? `Provider currency: ${provider.currency}` : '',
+      );
+    });
 
-  const donCard = don
-    ? [card(
-      'Donmarketplace Logs',
-      don.purchasesEnabled ? 'Purchases on' : don.enabled ? 'Catalogue only' : 'Disabled',
-      don.purchasesEnabled ? 'completed' : don.enabled ? 'pending' : 'failed',
-      [
-        check(Boolean(don.enabled), 'Enabled'),
-        check(Boolean(don.configured), 'API key configured'),
-        check(Boolean(don.modeValid), `Mode: ${don.mode || 'unknown'}`),
-        check(Boolean(don.deliveryContractConfirmed), 'Delivery contract confirmed'),
-        check(Boolean(don.purchasesEnabled), 'Purchases enabled'),
-      ],
-      [],
-      'Live mode is catalogue-only. Supplier checkout runs in sandbox mode only.',
-    )]
-    : [];
+    const donCard = don
+      ? [card(
+        'Donmarketplace Logs',
+        don.purchasesEnabled ? 'Purchases on' : don.enabled ? 'Catalogue only' : 'Disabled',
+        don.purchasesEnabled ? 'completed' : don.enabled ? 'pending' : 'failed',
+        [
+          check(Boolean(don.enabled), 'Enabled'),
+          check(Boolean(don.configured), 'API key configured'),
+          check(Boolean(don.modeValid), `Mode: ${don.mode || 'unknown'}`),
+          check(Boolean(don.deliveryContractConfirmed), 'Delivery contract confirmed'),
+          check(Boolean(don.purchasesEnabled), 'Purchases enabled'),
+        ],
+        [],
+        'Live mode is catalogue-only. Supplier checkout runs in sandbox mode only.',
+      )]
+      : [];
 
-  const cards = [...providerCards, ...donCard];
-  const providerContent = state.loading && !state.supplierStatus
-    ? loadingBox()
-    : cards.length
-      ? `<div class="ej-admin-provider-grid">${cards.join('')}</div>`
-      : emptyState('Provider status unavailable', 'Provider keys or native currency/rate configuration may be missing. The frontend does not fabricate availability, prices, or supplier product counts.', 'warning');
+    const cards = [...providerCards, ...donCard];
+    const providerContent = state.loading && !state.supplierStatus
+      ? loadingBox()
+      : cards.length
+        ? `<div class="ej-admin-provider-grid">${cards.join('')}</div>`
+        : emptyState('Provider status unavailable', 'Provider keys or native currency/rate configuration may be missing. The frontend does not fabricate availability, prices, or supplier product counts.', 'warning');
 
-  const body = `<section class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">LIVE PROVIDER STATUS</span><h2>${cards.length ? 'Provider readiness' : 'No provider status returned'}</h2></div><span class="ej-admin-lock-pill">${icon('lock', 13)} No invented counts</span></div>${providerContent}<p class="ej-admin-muted">A provider shows customer quotes only when it is Enabled and fully configured. Orders also need Purchases enabled. Sync imports supplier catalogue details only. Choose a Don Log in Products to set its selling price and activate it individually. Supplier checkout remains separately controlled by the server.</p></section>`;
-  return shell(header('SUPPLIER OPERATIONS', 'Provider status', 'Inspect each provider connection and sync Don Logs. Set each product selling price and activate it directly from Products.', action) + (state.pageError ? alertBox(state.pageError, 'error', true) : '') + body);
-} function auditPage() {
+    const body = `<section class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">LIVE PROVIDER STATUS</span><h2>${cards.length ? 'Provider readiness' : 'No provider status returned'}</h2></div><span class="ej-admin-lock-pill">${icon('lock', 13)} No invented counts</span></div>${providerContent}<p class="ej-admin-muted">A provider shows customer quotes only when it is Enabled and fully configured. Orders also need Purchases enabled. Sync imports supplier catalogue details only. Choose a Don Log in Products to set its selling price and activate it individually. Supplier checkout remains separately controlled by the server.</p></section>`;
+    return shell(header('SUPPLIER OPERATIONS', 'Provider status', 'Inspect each provider connection and sync Don Logs. Set each product selling price and activate it directly from Products.', action) + (state.pageError ? alertBox(state.pageError, 'error', true) : '') + body);
+  }
+  function auditPage() {
     return shell(`${header('ACCOUNTABILITY', 'Audit logs', 'Redacted operational events from the admin service. Credential values and ciphertext are never returned.', `<button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 15)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}<section class="ej-admin-panel ej-admin-table-panel">${state.loading ? loadingBox() : state.audits.length ? `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Target</th><th>Safe detail</th></tr></thead><tbody>${state.audits.map((event) => `<tr><td>${dateLabel(event.createdAt)}</td><td><span class="ej-admin-status">${escapeHTML(event.action)}</span></td><td>${escapeHTML(event.actorEmail || '—')}</td><td><code>${escapeHTML(event.targetId || '—')}</code></td><td>${escapeHTML(typeof event.detail === 'string' ? event.detail : JSON.stringify(event.detail || {}))}</td></tr>`).join('')}</tbody></table></div>` : emptyState('No audit events returned', 'The server has not returned any redacted events for this account.', 'audit')}</section>`);
   }
   function page() {
@@ -641,7 +675,7 @@ function supplierPage() {
     else if (group === 'FORMAT') { const platform=get('formatPlatform'); const formatName=get('formatName'); const formatType=get('formatType'); if(platform && formatName && ['WRITEUP','CREDENTIALS'].includes(formatType)) push(platform,'FORMAT',{formatName,formatType},formatName); }
     if (!listings.length) { state.pageError = 'Select at least one listing option before continuing.'; render(); return; }
     if (!['WORKING_TOOLS','FORMAT'].includes(group) && (!Number.isFinite(details.age) || details.age <= 0)) { state.pageError = 'Enter the account age in months.'; render(); return; }
-    if (group === 'FORMAT' && details.formatType === 'WRITEUP' && !details.description) { state.pageError = 'Enter the write-up content.'; render(); return; }
+    if (group === 'FORMAT' && details.formatType === 'WRITEUP' && !details.formatWriteup) { state.pageError = 'Enter the write-up content.'; render(); return; }
     if (group === 'FORMAT' && details.formatType === 'CREDENTIALS' && !details.formatCredentials) { state.pageError = 'Enter the private credential details.'; render(); return; }
     if (group === 'WORKING_TOOLS' && !/^https?:\/\//i.test(details.toolLink)) { state.pageError = 'Working tools require a valid tool link.'; render(); return; }
     if (details.image && !/^https?:\/\//i.test(details.image)) { state.pageError = 'Image URL must start with http:// or https://.'; render(); return; }
