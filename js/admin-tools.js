@@ -8,6 +8,14 @@ const PRODUCT_STATUSES = ['DRAFT', 'ACTIVE', 'ARCHIVED'];
 const INVENTORY_STATUSES = ['AVAILABLE', 'RESERVED', 'SOLD', 'QUARANTINED'];
 const SCOPES = ['DEFAULT', 'PLATFORM', 'PRODUCT'];
 const MODES = ['FIXED', 'PERCENT', 'MANUAL'];
+const REQUEST_TIMEOUT_MS = 30_000;
+// Supplier (Don Logs) listings are switched off: the admin manages only Emmyjosh's own SocialLogs.
+// Set to true to bring the Don Logs tab, sync and pricing back.
+const DON_LOGS_ENABLED = false;
+const SESSION_CACHE_MS = 5 * 60_000;
+// The admin view remounts on every navigation, so remember the verified session briefly instead of asking the
+// server on each page. The server still checks the cookie on every API call; a 401 clears this at once.
+let sessionCache = null;
 
 const fallbackIcons = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -78,6 +86,13 @@ function minorMoneyLabel(value) {
     return 'Price unavailable';
   }
 }
+// Orders come back either in minor units (totalMinor/amountMinor) or as a Naira decimal string (total, e.g. "5000.00").
+function orderAmountLabel(order) {
+  const minor = order?.totalMinor ?? order?.amountMinor;
+  if (minor !== undefined && minor !== null && minor !== '') return minorMoneyLabel(minor);
+  if (order?.total !== undefined && order?.total !== null && order?.total !== '') return moneyLabel(order.total);
+  return 'Unknown';
+}
 function statusClass(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
 }
@@ -98,6 +113,7 @@ function safeBackendMessage(value) {
 }
 function controlledError(error, fallback = 'The request could not be completed. Try again.') {
   const status = Number(error?.status);
+  if (error?.code === 'timeout') return 'The admin service took too long to respond. Try again.';
   if (status === 401 || status === 403) return 'Your admin session is no longer valid. Sign in again.';
   if (status === 409) return 'This record changed or conflicts with another record. Refresh and try again.';
   if (status === 413) return 'The submitted content is too large for this operation.';
@@ -172,6 +188,27 @@ function ensureLoginStyles() {
   document.head.appendChild(style);
 }
 
+// Page-entrance motion for the admin workspace. It only runs when a view first appears (see render()), never on
+// the many re-renders caused by typing, filtering or opening a drawer.
+const ADMIN_MOTION_CSS = `
+@keyframes ej-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.ej-enter .ej-admin-page-head,.ej-enter .ej-admin-metric,.ej-enter .ej-admin-panel,.ej-enter .ej-admin-quick-card,.ej-enter .ej-admin-filter-row,.ej-enter .ej-admin-alert{animation:ej-rise .5s cubic-bezier(.2,.7,.2,1) both}
+.ej-enter .ej-admin-metrics>*:nth-child(2),.ej-enter .ej-admin-insights>*:nth-child(1){animation-delay:.05s}
+.ej-enter .ej-admin-metrics>*:nth-child(3),.ej-enter .ej-admin-insights>*:nth-child(2){animation-delay:.1s}
+.ej-enter .ej-admin-metrics>*:nth-child(4),.ej-enter .ej-admin-insights>*:nth-child(3){animation-delay:.15s}
+.ej-enter .ej-admin-overview-grid>*,.ej-enter .ej-admin-quick-grid>*{animation-delay:.2s}
+.ej-admin-sidebar .ej-admin-nav-link,.ej-admin-quick-card,.ej-admin-panel{transition:transform .18s ease,box-shadow .18s ease,background .16s ease}
+@media (prefers-reduced-motion:reduce){.ej-enter *{animation:none!important}.ej-admin-shell *{transition:none!important}}
+`;
+
+function ensureAdminMotionStyles() {
+  if (typeof document === 'undefined' || document.getElementById('ej-admin-motion-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'ej-admin-motion-styles';
+  style.textContent = ADMIN_MOTION_CSS;
+  document.head.appendChild(style);
+}
+
 // The admin shell (sidebar, top bar, tables, drawers) is styled by admin-tools.css. If the page did
 // not link that file, or the link failed to load, add it from here. Candidates are tried in order:
 // next to this script first, then common site folders. A server that answers a missing file with
@@ -213,6 +250,7 @@ export async function mountAdminTools(root, options = {}) {
   await ensureAdminStyles();
   const mountMarker = {};
   root.__adminToolsMount = mountMarker;
+  ensureAdminMotionStyles();
   const escapeHTML = options.escapeHTML || localEscape;
   const icon = (name, size = 19) => fallbackIcons[name] ? localIcon(name, size) : options.icon ? options.icon(name, size) : localIcon(name, size);
   const logo = options.logo || ((className = '') => `<img class="brand-logo ${className}" src="${DEFAULT_LOGO}" alt="Emmyjosh Logs" width="142" height="80">`);
@@ -231,8 +269,10 @@ export async function mountAdminTools(root, options = {}) {
   let revision = 0;
   let busy = false;
   let logoutRetry = false;
+  let lastAnimKey = '';
+  let hiddenAt = 0;
   const state = {
-    summary: null, products: [], rules: [], imports: [], units: [], audits: [], supplier: null, checkoutOrders: [], recentOrders: [], recentAudits: [], orderFilter: 'All', supplierStatus: null, productTab: 'DONMARKETPLACE', selectedDonProduct: null,
+    summary: null, products: [], rules: [], imports: [], units: [], audits: [], supplier: null, checkoutOrders: [], recentOrders: [], recentAudits: [], orderFilter: 'All', supplierStatus: null, productTab: DON_LOGS_ENABLED ? 'DONMARKETPLACE' : 'OWN', selectedDonProduct: null,
     error: '', pageError: '', loading: false, drawer: null, editingProduct: null,
     productForm: emptyProduct(), socialStep: 1, socialGroup: '', pricingForm: emptyRule(), calculator: { cost: '', platform: '', productId: '', mode: 'FIXED', value: '', result: null, error: '' },
     inventory: { productId: '', status: '', query: '' }, upload: emptyUpload(), uploadResult: null,
@@ -276,21 +316,27 @@ export async function mountAdminTools(root, options = {}) {
     state.upload = emptyUpload(); state.uploadResult = null;
     state.inventoryError = ''; state.productsError = ''; state.rulesError = ''; state.importsError = ''; state.auditError = ''; state.unitsError = '';
   }
+  // Reads rely on the in-page skeleton, so only writes (and explicitly labelled reads) raise the global overlay.
+  // Every request has a timeout so a request paused by a sleeping tab can never leave a view loading forever.
   async function request(path, init = {}) {
     const headers = new Headers(init.headers || {});
     headers.set('X-EJ-Request', '1');
     headers.set('Accept', 'application/json');
     if (init.body !== undefined) headers.set('Content-Type', 'application/json');
     if (csrfToken && init.method && init.method !== 'GET') headers.set('X-Admin-CSRF', csrfToken);
+    const isRead = !init.method || init.method === 'GET';
+    const endLoading = isRead && !init.loadingLabel ? () => {} : beginLoading(init.loadingLabel || 'Saving…');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), init.timeoutMs || REQUEST_TIMEOUT_MS);
     let response;
-    const endLoading = beginLoading(init.loadingLabel || 'Loading verified admin data…');
-    try {
-      response = await fetch(`${ADMIN_ROOT}${path}`, { ...init, headers, credentials: 'include' });
-    } catch (error) {
-      const wrapped = new Error('network'); wrapped.status = 0; throw wrapped;
-    } finally { endLoading(); }
     let body = null;
-    try { body = await response.json(); } catch { /* controlled below */ }
+    try {
+      response = await fetch(`${ADMIN_ROOT}${path}`, { ...init, headers, credentials: 'include', signal: controller.signal });
+      try { body = await response.json(); } catch { /* controlled below */ }
+    } catch (error) {
+      const wrapped = new Error('network'); wrapped.status = 0; wrapped.code = controller.signal.aborted ? 'timeout' : 'network'; throw wrapped;
+    } finally { clearTimeout(timer); endLoading(); }
+    if (response.status === 401) sessionCache = null;
     if (!response.ok) {
       const envelope = body?.error && typeof body.error === 'object' ? body.error : body || {};
       const error = new Error('request');
@@ -309,10 +355,15 @@ export async function mountAdminTools(root, options = {}) {
     return body || {};
   }
   async function loadSession(token = revision) {
+    if (sessionCache && Date.now() - sessionCache.at < SESSION_CACHE_MS) {
+      session = sessionCache.user; csrfToken = sessionCache.csrfToken; setupReady = sessionCache.setupReady; state.error = '';
+      return;
+    }
     try {
-      const result = await request('/session');
+      const result = await request('/session', { loadingLabel: 'Checking your admin session…' });
       if (!isCurrent(token)) return;
       session = result.user || null; csrfToken = result.csrfToken || null; setupReady = result.setupReady !== false;
+      sessionCache = session ? { user: session, csrfToken, setupReady, at: Date.now() } : null;
       state.error = '';
     } catch (error) {
       if (!isCurrent(token)) return;
@@ -327,7 +378,7 @@ export async function mountAdminTools(root, options = {}) {
         const [result, , extras] = await Promise.all([
           request('/summary'),
           loadProducts(token),
-          Promise.allSettled([request('/commerce/orders'), request('/audit')]),
+          Promise.allSettled([request('/commerce/orders?limit=8'), request('/audit?limit=8')]),
         ]);
         if (!isCurrent(token)) return; state.summary = result; state.supplier = result.supplier || null;
         // Orders and audit feeds are optional extras: a failure here must never break the overview.
@@ -337,7 +388,8 @@ export async function mountAdminTools(root, options = {}) {
       } else if (path === '/admin/products' || path === '/admin/pricing' || path === '/admin/inventory') {
         const result = await request('/products'); if (!isCurrent(token)) return; state.products = Array.isArray(result.products) ? result.products : [];
       } else if (path === '/admin/uploads') {
-        await loadProducts(token); const result = await request('/imports'); if (!isCurrent(token)) return; state.imports = Array.isArray(result.imports) ? result.imports : [];
+        const [, result] = await Promise.all([loadProducts(token), request('/imports')]);
+        if (!isCurrent(token)) return; state.imports = Array.isArray(result.imports) ? result.imports : [];
       } else if (path === '/admin/orders' || path === '/admin/checkout') {
         const result = await request('/commerce/orders'); if (!isCurrent(token)) return; state.checkoutOrders = Array.isArray(result.orders) ? result.orders : [];
       } else if (path === '/admin/supplier') {
@@ -384,7 +436,7 @@ export async function mountAdminTools(root, options = {}) {
       ['upload', 'Stock imports', 'top:37%;right:26%', 'ejl-float ejl-float-b'],
       ['audit', 'Audit trail', 'top:56%;right:8%', 'ejl-float'],
     ].map(([glyph, label, pos, cls]) => `<span class="ejl-chip ${cls}" style="${pos}">${icon(glyph, 18)}${escapeHTML(label)}</span>`).join('');
-    return `<div class="ejl-page"><aside class="ejl-brand"><div class="ejl-deco" aria-hidden="true"><i class="ejl-ring" style="width:560px;height:560px;right:-200px;top:60px"></i><i class="ejl-ring" style="width:380px;height:380px;right:-110px;top:150px"></i><i class="ejl-ring" style="width:200px;height:200px;right:-20px;top:240px"></i><i class="ejl-dots"></i>${chips}</div><a class="ejl-badge" href="/" data-admin-link="/" aria-label="Emmyjosh Logs home">${logo('ejl-logo')}</a><div class="ejl-brand-copy"><h2>Welcome back</h2><p>Secure catalog, pricing, stock and import controls for the admin team.</p></div></aside><section class="ejl-formside"><a class="ejl-back" href="/" data-admin-link="/">${icon('arrow', 16)} Back to marketplace</a><div class="ejl-inner"><span class="ejl-eyebrow">SECURE ADMIN ACCESS</span><h1>Admin sign in</h1><p class="ejl-sub">Use your configured admin credentials. This form never stores passwords in the browser.</p>${!setupReady ? `<div class="ej-admin-alert warning">${icon('warning', 17)}<span>Admin setup is not ready on the server. Bootstrap the backend before attempting login.</span></div>` : ''}${feedback ? `<div class="ej-admin-alert error" role="alert">${icon('warning', 17)}<span>${escapeHTML(feedback)}</span><button type="button" class="link-button" data-admin-action="${logoutRetry ? 'retry-logout' : 'retry-session'}">Retry</button></div>` : ''}<form data-admin-form="login" class="ejl-form"><label class="ejl-field">Email address<input name="email" type="email" required autocomplete="username" placeholder="admin@example.com"></label><label class="ejl-field">Password<input name="password" type="password" required autocomplete="current-password" minlength="12" placeholder="Your admin password"></label><button class="ejl-submit" type="submit" ${!setupReady ? 'disabled' : ''}>Sign in to admin ${icon('arrow', 16)}</button></form><p class="ejl-note">Session cookies and CSRF tokens are supplied by the admin service. Do not use this form on shared computers.</p></div></section></div><div class="ej-admin-toast-slot" data-admin-toast aria-live="polite"></div>`;
+    return `<div class="ejl-page"><aside class="ejl-brand"><div class="ejl-deco" aria-hidden="true"><i class="ejl-ring" style="width:560px;height:560px;right:-200px;top:60px"></i><i class="ejl-ring" style="width:380px;height:380px;right:-110px;top:150px"></i><i class="ejl-ring" style="width:200px;height:200px;right:-20px;top:240px"></i><i class="ejl-dots"></i>${chips}</div><a class="ejl-badge" href="/" data-admin-link="/" aria-label="Emmyjosh Logs home">${logo('ejl-logo')}</a><div class="ejl-brand-copy"><h2>Welcome back</h2><p>Secure catalog, pricing, stock and import controls for the admin team.</p></div></aside><section class="ejl-formside"><a class="ejl-back" href="/" data-admin-link="/">${icon('arrow', 16)} Back to marketplace</a><div class="ejl-inner"><span class="ejl-eyebrow">SECURE ADMIN ACCESS</span><h1>Admin sign in</h1><p class="ejl-sub">Use your configured admin credentials. This form never stores passwords in the browser.</p>${!setupReady ? `<div class="ej-admin-alert warning">${icon('warning', 17)}<span>Admin setup is not ready on the server. Bootstrap the backend before attempting login.</span></div>` : ''}${feedback ? `<div class="ej-admin-alert error" role="alert">${icon('warning', 17)}<span>${escapeHTML(feedback)}</span><button type="button" class="link-button" data-admin-action="${logoutRetry ? 'retry-logout' : 'retry-session'}">Retry</button></div>` : ''}<form data-admin-form="login" class="ejl-form"><label class="ejl-field">Email address<input name="email" type="email" required autocomplete="username" placeholder="admin@example.com"></label><label class="ejl-field">Password<input name="password" type="password" required autocomplete="current-password" minlength="12" placeholder="Your admin password"></label><button class="ejl-submit" type="submit" ${!setupReady || busy ? 'disabled' : ''}>${busy ? 'Signing in…' : `Sign in to admin ${icon('arrow', 16)}`}</button></form><p class="ejl-note">Session cookies and CSRF tokens are supplied by the admin service. Do not use this form on shared computers.</p></div></section></div><div class="ej-admin-toast-slot" data-admin-toast aria-live="polite"></div>`;
   }
   function header(kicker, title, description, action = '') { return `<div class="ej-admin-page-head"><div><span class="ej-admin-eyebrow">${escapeHTML(kicker)}</span><h1>${title}</h1>${description ? `<p>${escapeHTML(description)}</p>` : ''}</div>${action}</div>`; }
   function alertBox(message, tone = 'error', retry = false) { return `<div class="ej-admin-alert ${tone}" role="alert">${icon(tone === 'error' ? 'warning' : 'check', 17)}<span>${escapeHTML(message)}</span>${retry ? '<button type="button" class="link-button" data-admin-action="retry-page">Retry</button>' : ''}</div>`; }
@@ -406,12 +458,12 @@ export async function mountAdminTools(root, options = {}) {
       : `<div class="ej-admin-attention-ok">${icon('check', 18)}<span><b>All clear</b><small>Nothing needs your attention right now.</small></span></div>`;
     const recentOrders = orders.slice(0, 5);
     const recentAudits = audits.slice(0, 5);
-    return `<section class="ej-admin-insights"><article class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">NEEDS ATTENTION</span><h2>Today</h2></div></div><div class="ej-admin-attention">${attentionList}</div></article><article class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">SALES</span><h2>Recent orders</h2></div><a class="link-button" href="/admin/checkout" data-admin-link="/admin/checkout">View all</a></div>${recentOrders.length ? `<ul class="ej-admin-feed">${recentOrders.map((order) => `<li><span><b><code>${escapeHTML(order.id || order.orderReference || '—')}</code></b><small>${dateLabel(order.updatedAt || order.createdAt)}</small></span><span class="ej-admin-feed-end"><span class="ej-admin-status ${statusClass(order.status)}">${escapeHTML(order.status || '—')}</span><small>${minorMoneyLabel(order.totalMinor ?? order.amountMinor ?? order.total ?? '')}</small></span></li>`).join('')}</ul>` : `<p class="ej-admin-muted">No orders returned yet.</p>`}</article><article class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">ACTIVITY</span><h2>Latest events</h2></div><a class="link-button" href="/admin/audit-logs" data-admin-link="/admin/audit-logs">Audit trail</a></div>${recentAudits.length ? `<ul class="ej-admin-feed">${recentAudits.map((event) => `<li><span><b>${escapeHTML(event.action || 'Event')}</b><small>${escapeHTML(event.actorEmail || '—')}</small></span><span class="ej-admin-feed-end"><small>${dateLabel(event.createdAt)}</small></span></li>`).join('')}</ul>` : `<p class="ej-admin-muted">No recent events returned.</p>`}</article></section>`;
+    return `<section class="ej-admin-insights"><article class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">NEEDS ATTENTION</span><h2>Today</h2></div></div><div class="ej-admin-attention">${attentionList}</div></article><article class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">SALES</span><h2>Recent orders</h2></div><a class="link-button" href="/admin/checkout" data-admin-link="/admin/checkout">View all</a></div>${recentOrders.length ? `<ul class="ej-admin-feed">${recentOrders.map((order) => `<li><span><b><code>${escapeHTML(order.id || order.orderReference || '—')}</code></b><small>${dateLabel(order.updatedAt || order.createdAt)}</small></span><span class="ej-admin-feed-end"><span class="ej-admin-status ${statusClass(order.status)}">${escapeHTML(order.status || '—')}</span><small>${orderAmountLabel(order)}</small></span></li>`).join('')}</ul>` : `<p class="ej-admin-muted">No orders returned yet.</p>`}</article><article class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">ACTIVITY</span><h2>Latest events</h2></div><a class="link-button" href="/admin/audit-logs" data-admin-link="/admin/audit-logs">Audit trail</a></div>${recentAudits.length ? `<ul class="ej-admin-feed">${recentAudits.map((event) => `<li><span><b>${escapeHTML(event.action || 'Event')}</b><small>${escapeHTML(event.actorEmail || '—')}</small></span><span class="ej-admin-feed-end"><small>${dateLabel(event.createdAt)}</small></span></li>`).join('')}</ul>` : `<p class="ej-admin-muted">No recent events returned.</p>`}</article></section>`;
   }
   function overviewPage() {
     const summary = state.summary || {};
     const supplier = summary.supplier || state.supplier || { enabled: false, mode: 'sandbox', message: 'Supplier purchasing is intentionally locked until stock is approved.' };
-    return shell(`${header('CONTROL CENTER', `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, admin.`, 'A live operational view of your product catalogue, imports and orders.', `<a class="button button-small" href="/admin/products" data-admin-link="/admin/products">${icon('plus', 15)} New product</a>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}${state.loading && !state.summary ? loadingBox() : `<section class="ej-admin-metrics">${metric('Products', String(summary.products ?? '—'), 'Catalog records', 'box', 'orange')}${metric('Available stock', String(summary.available ?? '—'), 'Units ready to sell', 'warehouse', 'green')}${metric('Imports', String(summary.imports ?? '—'), 'Validated and committed batches', 'upload', 'brown')}${metric('Don Logs', String(state.products.filter((p) => p.source === 'DONMARKETPLACE').length || '—'), 'Supplier catalogue listings', 'refresh', 'yellow')}</section>${insightsMarkup()}<section class="ej-admin-overview-grid"><article class="ej-admin-panel ej-admin-feature-panel"><div><span class="ej-admin-eyebrow light">OPERATIONS LEDGER</span><h2>Build a catalog<br>you can trust.</h2><p>Every price is calculated by the server, every stock action is audited, and credentials stay encrypted.</p><a class="button button-light" href="/admin/audit-logs" data-admin-link="/admin/audit-logs">Review audit trail ${icon('arrow', 15)}</a></div><div class="ej-admin-orbit-art">${icon('shield', 48)}<span></span><span></span></div></article><article class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">SUPPLIER CONNECTION</span><h2>Stock source</h2></div><span class="ej-admin-lock-pill">${icon('lock', 13)} Locked</span></div><div class="ej-admin-supplier-lock">${icon('lock', 22)}<div><b>${escapeHTML(supplier.mode || 'Sandbox')} mode</b><p>${escapeHTML(supplier.message || 'Supplier purchasing is not enabled.')}</p></div></div><p class="ej-admin-muted">Only manually imported OWN products can receive inventory in this workspace.</p></article></section><section class="ej-admin-quick-grid"><a href="/admin/uploads" data-admin-link="/admin/uploads" class="ej-admin-quick-card"><span>${icon('upload', 20)}</span><b>Import stock</b><small>Validate credentials safely</small>${icon('arrow', 16)}</a><a href="/admin/products" data-admin-link="/admin/products" class="ej-admin-quick-card"><span>${icon('box', 20)}</span><b>Manage products</b><small>Open Don Logs or My SocialLogs</small>${icon('arrow', 16)}</a></section>`}`);
+    return shell(`${header('CONTROL CENTER', `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, admin.`, 'A live operational view of your product catalogue, imports and orders.', `<a class="button button-small" href="/admin/products" data-admin-link="/admin/products">${icon('plus', 15)} New product</a>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}${state.loading && !state.summary ? loadingBox() : `<section class="ej-admin-metrics">${metric('Products', String(summary.products ?? '—'), 'Catalog records', 'box', 'orange')}${metric('Available stock', String(summary.available ?? '—'), 'Units ready to sell', 'warehouse', 'green')}${metric('Imports', String(summary.imports ?? '—'), 'Validated and committed batches', 'upload', 'brown')}${(DON_LOGS_ENABLED ? metric('Don Logs', String(state.products.filter((p) => p.source === 'DONMARKETPLACE').length || '—'), 'Supplier catalogue listings', 'refresh', 'yellow') : metric('Active listings', String(state.products.filter((p) => p.source === 'OWN' && p.status === 'ACTIVE').length), 'Live on the storefront', 'tag', 'yellow'))}</section>${insightsMarkup()}<section class="ej-admin-overview-grid"><article class="ej-admin-panel ej-admin-feature-panel"><div><span class="ej-admin-eyebrow light">OPERATIONS LEDGER</span><h2>Build a catalog<br>you can trust.</h2><p>Every price is calculated by the server, every stock action is audited, and credentials stay encrypted.</p><a class="button button-light" href="/admin/audit-logs" data-admin-link="/admin/audit-logs">Review audit trail ${icon('arrow', 15)}</a></div><div class="ej-admin-orbit-art">${icon('shield', 48)}<span></span><span></span></div></article><article class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">SUPPLIER CONNECTION</span><h2>Stock source</h2></div><span class="ej-admin-lock-pill">${icon('lock', 13)} Locked</span></div><div class="ej-admin-supplier-lock">${icon('lock', 22)}<div><b>${escapeHTML(supplier.mode || 'Sandbox')} mode</b><p>${escapeHTML(supplier.message || 'Supplier purchasing is not enabled.')}</p></div></div><p class="ej-admin-muted">Only manually imported OWN products can receive inventory in this workspace.</p></article></section><section class="ej-admin-quick-grid"><a href="/admin/uploads" data-admin-link="/admin/uploads" class="ej-admin-quick-card"><span>${icon('upload', 20)}</span><b>Import stock</b><small>Validate credentials safely</small>${icon('arrow', 16)}</a><a href="/admin/products" data-admin-link="/admin/products" class="ej-admin-quick-card"><span>${icon('box', 20)}</span><b>Manage products</b><small>Open Don Logs or My SocialLogs</small>${icon('arrow', 16)}</a></section>`}`);
   }
   function pricingMarkup(pricing, compact = false) {
     if (!pricing) return '<span class="ej-admin-unknown">Pricing unavailable</span>';
@@ -427,9 +479,10 @@ export async function mountAdminTools(root, options = {}) {
     return `<span class="ej-admin-counts">A ${escapeHTML(String(counts.AVAILABLE ?? product.availableCount ?? 0))} · R ${escapeHTML(String(counts.RESERVED ?? 0))} · S ${escapeHTML(String(counts.SOLD ?? 0))} · Q ${escapeHTML(String(counts.QUARANTINED ?? 0))}</span>`;
   }
   function productRows() {
-    const visible = state.products.filter((product) => product.source === state.productTab);
+    const activeTab = DON_LOGS_ENABLED ? state.productTab : 'OWN';
+    const visible = state.products.filter((product) => product.source === activeTab);
     if (!visible.length) {
-      const own = state.productTab === 'OWN';
+      const own = activeTab === 'OWN';
       return `<tr><td colspan="5">${emptyState(own ? 'No SocialLogs yet' : 'No Don Logs synced yet', own ? 'Create your first Emmyjosh-owned SocialLog.' : 'Sync the Donmarketplace catalogue to see supplier logs here.', 'box')}</td></tr>`;
     }
     return visible.map((product) => {
@@ -440,12 +493,12 @@ export async function mountAdminTools(root, options = {}) {
     }).join('');
   }
   function productsPage() {
-    const ownTab = state.productTab === 'OWN';
-    const tabCount = state.products.filter((product) => product.source === state.productTab).length;
+    const ownTab = !DON_LOGS_ENABLED || state.productTab === 'OWN';
+    const tabCount = state.products.filter((product) => product.source === (ownTab ? 'OWN' : 'DONMARKETPLACE')).length;
     const action = ownTab
       ? `<button class="button button-small" type="button" data-admin-action="new-product">${icon('plus', 15)} Create SocialLog</button>`
       : `<button class="button button-small" type="button" data-admin-action="supplier-sync">${icon('refresh', 15)} Sync Don Logs</button>`;
-    return shell(`${header('CATALOG', 'Products', 'Manage supplier-sourced Don Logs and your own SocialLogs separately.', action)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}<section class="ej-admin-panel ej-admin-table-panel"><div class="ej-admin-product-tabs" role="tablist" aria-label="Product sources"><button type="button" role="tab" aria-selected="${!ownTab}" class="ej-admin-product-tab ${!ownTab ? 'active' : ''}" data-admin-action="product-tab" data-tab="DONMARKETPLACE">Don Logs <span>${state.products.filter((p) => p.source === 'DONMARKETPLACE').length}</span></button><button type="button" role="tab" aria-selected="${ownTab}" class="ej-admin-product-tab ${ownTab ? 'active' : ''}" data-admin-action="product-tab" data-tab="OWN">My SocialLogs <span>${state.products.filter((p) => p.source === 'OWN').length}</span></button></div><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">${ownTab ? 'EMMYJOSH INVENTORY' : 'SUPPLIER CATALOGUE'}</span><h2>${tabCount} ${ownTab ? 'SocialLog' : 'Don Log'}${tabCount === 1 ? '' : 's'}</h2></div><button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 14)} Refresh</button></div>${state.loading ? loadingBox() : `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Product</th><th>Status</th>${ownTab ? '<th>Selling price</th><th>Stock counts</th>' : '<th>Supplier price</th><th>Your selling price</th>'}<th></th></tr></thead><tbody>${productRows()}</tbody></table></div>`}</section>${state.drawer === 'social' ? socialWizardDrawer() : state.drawer ? productDrawer() : ''}${state.selectedDonProduct ? donProductDrawer(state.selectedDonProduct) : ''}`);
+    return shell(`${header('CATALOG', 'Products', DON_LOGS_ENABLED ? 'Manage supplier-sourced Don Logs and your own SocialLogs separately.' : 'Create and manage your own SocialLogs.', action)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}<section class="ej-admin-panel ej-admin-table-panel">${DON_LOGS_ENABLED ? `<div class="ej-admin-product-tabs" role="tablist" aria-label="Product sources"><button type="button" role="tab" aria-selected="${!ownTab}" class="ej-admin-product-tab ${!ownTab ? 'active' : ''}" data-admin-action="product-tab" data-tab="DONMARKETPLACE">Don Logs <span>${state.products.filter((p) => p.source === 'DONMARKETPLACE').length}</span></button><button type="button" role="tab" aria-selected="${ownTab}" class="ej-admin-product-tab ${ownTab ? 'active' : ''}" data-admin-action="product-tab" data-tab="OWN">My SocialLogs <span>${state.products.filter((p) => p.source === 'OWN').length}</span></button></div>` : ''}<div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">${ownTab ? 'EMMYJOSH INVENTORY' : 'SUPPLIER CATALOGUE'}</span><h2>${tabCount} ${ownTab ? 'SocialLog' : 'Don Log'}${tabCount === 1 ? '' : 's'}</h2></div><button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 14)} Refresh</button></div>${state.loading ? loadingBox() : `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Product</th><th>Status</th>${ownTab ? '<th>Selling price</th><th>Stock counts</th>' : '<th>Supplier price</th><th>Your selling price</th>'}<th></th></tr></thead><tbody>${productRows()}</tbody></table></div>`}</section>${state.drawer === 'social' ? socialWizardDrawer() : state.drawer ? productDrawer() : ''}${state.selectedDonProduct ? donProductDrawer(state.selectedDonProduct) : ''}`);
   }
   function donProductDrawer(product) {
     const apiPrice = product.acquisitionCost || '';
@@ -526,7 +579,7 @@ export async function mountAdminTools(root, options = {}) {
     const groups = { All: () => true, Active: (o) => ['PENDING', 'PROCESSING'].includes(String(o.status).toUpperCase()), Completed: (o) => ['COMPLETED', 'FULFILLED', 'DELIVERED'].includes(String(o.status).toUpperCase()), 'Needs review': (o) => ['RECONCILIATION', 'FAILED'].includes(String(o.status).toUpperCase()), Refunded: (o) => String(o.status).toUpperCase() === 'REFUNDED' };
     const rows = allRows.filter(groups[filterKey] || groups.All);
     const orderFilters = `<div class="ej-admin-filter-row" role="group" aria-label="Filter orders">${Object.keys(groups).map((name) => `<button type="button" class="ej-admin-filter ${filterKey === name ? 'active' : ''}" aria-pressed="${filterKey === name}" data-admin-action="order-filter" data-filter="${name}">${name}<span>${allRows.filter(groups[name]).length}</span></button>`).join('')}</div>`;
-    return shell(`${header('CHECKOUT', 'Checkout and refunds', 'Live commerce records with private details hidden. Refunds credit the customer wallet for the full original purchase amount; they are not bank refunds.', `<button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 14)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}${allRows.length ? orderFilters : ''}<section class="ej-admin-panel ej-admin-table-panel">${state.loading ? loadingBox() : rows.length ? `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>Amount</th><th>Updated</th><th></th></tr></thead><tbody>${rows.map((order) => `<tr><td><code>${escapeHTML(order.id || order.orderReference || '—')}</code></td><td>${escapeHTML(order.customerEmail || order.userEmail || 'Redacted')}</td><td><span class="ej-admin-status ${statusClass(order.status)}">${escapeHTML(order.status || '—')}</span></td><td>${minorMoneyLabel(order.totalMinor ?? order.amountMinor ?? order.total ?? '')}</td><td>${dateLabel(order.updatedAt || order.createdAt)}</td><td><button class="button button-small button-outline" type="button" data-admin-action="refund-order" data-id="${escapeHTML(order.id || '')}" ${['REFUNDED', 'CANCELLED'].includes(String(order.status).toUpperCase()) ? 'disabled' : ''}>Full wallet refund</button></td></tr>`).join('')}</tbody></table></div>` : emptyState('No commerce orders returned', 'No orders were returned. No demo balances or order counts are shown.', 'orders')}</section>`);
+    return shell(`${header('CHECKOUT', 'Checkout and refunds', 'Live commerce records with private details hidden. Refunds credit the customer wallet for the full original purchase amount; they are not bank refunds.', `<button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 14)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}${allRows.length ? orderFilters : ''}<section class="ej-admin-panel ej-admin-table-panel">${state.loading ? loadingBox() : rows.length ? `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>Amount</th><th>Updated</th><th></th></tr></thead><tbody>${rows.map((order) => `<tr><td><code>${escapeHTML(order.id || order.orderReference || '—')}</code></td><td>${escapeHTML(order.customerEmail || order.userEmail || 'Redacted')}</td><td><span class="ej-admin-status ${statusClass(order.status)}">${escapeHTML(order.status || '—')}</span></td><td>${orderAmountLabel(order)}</td><td>${dateLabel(order.updatedAt || order.createdAt)}</td><td><button class="button button-small button-outline" type="button" data-admin-action="refund-order" data-id="${escapeHTML(order.id || '')}" ${['REFUNDED', 'CANCELLED'].includes(String(order.status).toUpperCase()) ? 'disabled' : ''}>Full wallet refund</button></td></tr>`).join('')}</tbody></table></div>` : emptyState('No commerce orders returned', 'No orders were returned. No demo balances or order counts are shown.', 'orders')}</section>`);
   }
 
   // Reads the real shape returned by GET /providers/status:
@@ -535,8 +588,8 @@ export async function mountAdminTools(root, options = {}) {
   function supplierPage() {
     const status = state.supplierStatus || {};
     const providers = Array.isArray(status.providers) ? status.providers : [];
-    const don = status.don && typeof status.don === 'object' ? status.don : null;
-    const action = `<button class="button button-small" type="button" data-admin-action="supplier-sync">${icon('refresh', 14)} Sync catalog</button>`;
+    const don = DON_LOGS_ENABLED && status.don && typeof status.don === 'object' ? status.don : null;
+    const action = DON_LOGS_ENABLED ? `<button class="button button-small" type="button" data-admin-action="supplier-sync">${icon('refresh', 14)} Sync catalog</button>` : '';
 
     const check = (ok, text) => `<li style="list-style:none;display:flex;align-items:center;gap:6px;margin:3px 0;color:${ok ? '#1a7f37' : '#b42318'}">${icon(ok ? 'check' : 'close', 14)}<span>${escapeHTML(text)}</span></li>`;
     const card = (title, badge, tone, checks, hints, note) => `<article class="ej-admin-provider-card"><b>${escapeHTML(title)}</b><span class="ej-admin-status ${statusClass(tone)}">${escapeHTML(badge)}</span><ul style="margin:10px 0 0;padding:0">${checks.join('')}</ul>${hints.length ? `<small style="display:block;margin-top:8px">${hints.map((hint) => escapeHTML(hint)).join('<br>')}</small>` : ''}${note ? `<small style="display:block;margin-top:6px">${escapeHTML(note)}</small>` : ''}</article>`;
@@ -593,8 +646,8 @@ export async function mountAdminTools(root, options = {}) {
         ? `<div class="ej-admin-provider-grid">${cards.join('')}</div>`
         : emptyState('Provider status unavailable', 'Provider keys or native currency/rate configuration may be missing. The frontend does not fabricate availability, prices, or supplier product counts.', 'warning');
 
-    const body = `<section class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">LIVE PROVIDER STATUS</span><h2>${cards.length ? 'Provider readiness' : 'No provider status returned'}</h2></div><span class="ej-admin-lock-pill">${icon('lock', 13)} No invented counts</span></div>${providerContent}<p class="ej-admin-muted">A provider shows customer quotes only when it is Enabled and fully configured. Orders also need Purchases enabled. Sync imports supplier catalogue details only. Choose a Don Log in Products to set its selling price and activate it individually. Supplier checkout remains separately controlled by the server.</p></section>`;
-    return shell(header('SUPPLIER OPERATIONS', 'Provider status', 'Inspect each provider connection and sync Don Logs. Set each product selling price and activate it directly from Products.', action) + (state.pageError ? alertBox(state.pageError, 'error', true) : '') + body);
+    const body = `<section class="ej-admin-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">LIVE PROVIDER STATUS</span><h2>${cards.length ? 'Provider readiness' : 'No provider status returned'}</h2></div><span class="ej-admin-lock-pill">${icon('lock', 13)} No invented counts</span></div>${providerContent}<p class="ej-admin-muted">A provider shows customer quotes only when it is Enabled and fully configured. Orders also need Purchases enabled.${DON_LOGS_ENABLED ? ' Sync imports supplier catalogue details only. Choose a Don Log in Products to set its selling price and activate it individually. Supplier checkout remains separately controlled by the server.' : ''}</p></section>`;
+    return shell(header('SUPPLIER OPERATIONS', 'Provider status', (DON_LOGS_ENABLED ? 'Inspect each provider connection and sync Don Logs. Set each product selling price and activate it directly from Products.' : 'Inspect the connection status of each virtual number provider.'), action) + (state.pageError ? alertBox(state.pageError, 'error', true) : '') + body);
   }
   function auditPage() {
     return shell(`${header('ACCOUNTABILITY', 'Audit logs', 'Redacted operational events from the admin service. Credential values and ciphertext are never returned.', `<button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 15)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}<section class="ej-admin-panel ej-admin-table-panel">${state.loading ? loadingBox() : state.audits.length ? `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Target</th><th>Safe detail</th></tr></thead><tbody>${state.audits.map((event) => `<tr><td>${dateLabel(event.createdAt)}</td><td><span class="ej-admin-status">${escapeHTML(event.action)}</span></td><td>${escapeHTML(event.actorEmail || '—')}</td><td><code>${escapeHTML(event.targetId || '—')}</code></td><td>${escapeHTML(typeof event.detail === 'string' ? event.detail : JSON.stringify(event.detail || {}))}</td></tr>`).join('')}</tbody></table></div>` : emptyState('No audit events returned', 'The server has not returned any redacted events for this account.', 'audit')}</section>`);
@@ -613,6 +666,12 @@ export async function mountAdminTools(root, options = {}) {
   function render() {
     if (!root.isConnected || root.__adminToolsMount !== mountMarker) return;
     root.innerHTML = page();
+    // Entrance motion plays once per view (and once more when its data arrives), never on interaction re-renders.
+    const animKey = `${currentRoute}|${session ? (state.loading ? 'loading' : 'ready') : 'out'}`;
+    if (animKey !== lastAnimKey) {
+      lastAnimKey = animKey;
+      root.querySelector('.ej-admin-content')?.classList.add('ej-enter');
+    }
     bind();
   }
   function syncForm(form, target) {
@@ -634,10 +693,15 @@ export async function mountAdminTools(root, options = {}) {
     const data = new FormData(form); const email = String(data.get('email') || '').trim(); const password = String(data.get('password') || '');
     form.reset(); busy = true; state.pageError = ''; render();
     try {
-      const result = await request('/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-      const sessionResult = await request('/session');
-      session = sessionResult.user || result.user || null; csrfToken = sessionResult.csrfToken || result.csrfToken || null; setupReady = sessionResult.setupReady !== false;
+      const result = await request('/login', { method: 'POST', body: JSON.stringify({ email, password }), loadingLabel: 'Signing in…' });
+      // The login response already carries the user and the (deterministic) CSRF token, so no second round trip is needed.
+      session = result.user || null; csrfToken = result.csrfToken || null; setupReady = true;
+      if (!session || !csrfToken) {
+        const sessionResult = await request('/session');
+        session = sessionResult.user || session; csrfToken = sessionResult.csrfToken || csrfToken; setupReady = sessionResult.setupReady !== false;
+      }
       if (!session) throw Object.assign(new Error('no-session'), { status: 401 });
+      sessionCache = { user: session, csrfToken, setupReady, at: Date.now() };
       logoutRetry = false; state.pageError = ''; state.error = ''; toast('Signed in to the admin workspace.', 'success'); go('/admin');
     } catch (error) { state.pageError = controlledError(error, 'Sign-in failed. Verify your credentials and try again.'); render(); }
     finally { busy = false; if (typeof options.navigate !== 'function' || !session) render(); }
@@ -779,7 +843,7 @@ export async function mountAdminTools(root, options = {}) {
   }
   async function logout() {
     if (busy) return;
-    busy = true; revision += 1; clearPrivateAdminState(); render();
+    busy = true; revision += 1; clearPrivateAdminState(); sessionCache = null; render();
     try {
       await request('/logout', { method: 'POST', body: JSON.stringify({}) });
       logoutRetry = false; state.pageError = ''; toast('Signed out of the admin workspace.', 'success');
@@ -789,6 +853,7 @@ export async function mountAdminTools(root, options = {}) {
     } finally {
       session = null;
       csrfToken = null;
+      sessionCache = null;
       busy = false;
       go('/admin/login');
     }
@@ -799,10 +864,10 @@ export async function mountAdminTools(root, options = {}) {
       const action = control.dataset.adminAction;
       if (action === 'order-filter') { state.orderFilter = control.dataset.filter || 'All'; render(); return; }
       if (action === 'menu') { root.querySelector('[data-admin-sidebar]')?.classList.toggle('open'); return; }
-      if (action === 'retry-session') { state.error = ''; await loadSession(revision); render(); return; }
+      if (action === 'retry-session') { state.error = ''; sessionCache = null; await loadSession(revision); render(); return; }
       if (action === 'retry-logout') { await logout(); return; }
       if (action === 'retry-page' || action === 'refresh-page') { state.pageError = ''; revision += 1; await loadRouteData(revision, currentRoute); return; }
-      if (action === 'product-tab') { state.productTab = control.dataset.tab === 'OWN' ? 'OWN' : 'DONMARKETPLACE'; state.selectedDonProduct = null; render(); return; }
+      if (action === 'product-tab') { if (!DON_LOGS_ENABLED) return; state.productTab = control.dataset.tab === 'OWN' ? 'OWN' : 'DONMARKETPLACE'; state.selectedDonProduct = null; render(); return; }
       if (action === 'open-don-product') { const product = state.products.find((item) => String(item.id) === String(control.dataset.id) && item.source === 'DONMARKETPLACE'); if (product) { state.selectedDonProduct = product; render(); } return; }
       if (action === 'close-don-product') { if (control.classList.contains('ej-admin-drawer-backdrop') && event.target !== control) return; state.selectedDonProduct = null; render(); return; }
       if (action === 'deactivate-don-product') {
@@ -890,6 +955,25 @@ export async function mountAdminTools(root, options = {}) {
     root.querySelectorAll('[data-admin-field="inventory-product"], [data-admin-field="inventory-status"]').forEach((input) => input.addEventListener('change', async () => { if (input.dataset.adminField === 'inventory-product') state.inventory.productId = input.value; else state.inventory.status = input.value; state.pageError = ''; await loadUnits(revision); render(); }));
     root.querySelectorAll('[data-admin-field="inventory-query"]').forEach((input) => input.addEventListener('input', () => { state.inventory.query = input.value; const rows = root.querySelectorAll('.ej-admin-table tbody tr'); rows.forEach((row) => row.hidden = !row.textContent.toLowerCase().includes(input.value.toLowerCase())); }));
   }
+
+  // Tab-return recovery and Escape-to-close. Both listeners remove themselves once this mount is replaced.
+  const onKeydown = (event) => {
+    if (root.__adminToolsMount !== mountMarker) { document.removeEventListener('keydown', onKeydown); document.removeEventListener('visibilitychange', onVisibility); return; }
+    if (event.key !== 'Escape' || busy) return;
+    if (document.querySelector('[class*="ds-"][role="dialog"], [class*="ds-"][aria-modal="true"]')) return;
+    if (state.selectedDonProduct) { state.selectedDonProduct = null; render(); return; }
+    if (state.drawer) { state.drawer = null; render(); }
+  };
+  const onVisibility = () => {
+    if (root.__adminToolsMount !== mountMarker) { document.removeEventListener('keydown', onKeydown); document.removeEventListener('visibilitychange', onVisibility); return; }
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    const away = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = 0;
+    // A request paused while the tab slept may never settle; if the view is still loading, ask again.
+    if (away > 5_000 && session && state.loading && currentRoute !== '/admin/login') { revision += 1; void loadRouteData(revision, currentRoute); }
+  };
+  document.addEventListener('keydown', onKeydown);
+  document.addEventListener('visibilitychange', onVisibility);
 
   await loadSession(revision);
   render();

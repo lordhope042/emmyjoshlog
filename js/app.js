@@ -10,6 +10,9 @@ import {
 
 const LOGO = '/manus-storage/emmyjosh-logo-original-crop_1be053b9.png';
 const HERO = '/manus-storage/async-images/DUkoSpJ2nXlRVxpQJjP4OK/image-1.webp';
+// Supplier (Don Logs) listings are switched off: the storefront sells only Emmyjosh's own stock.
+// Set to true to bring the supplier section back.
+const SUPPLIER_LOGS_ENABLED = false;
 const app = document.querySelector('#app');
 const endInitialLoading = beginLoading('Preparing your marketplace…');
 const state = {
@@ -121,7 +124,9 @@ function productSymbol(product, size = 38) {
 }
 
 function catalogProducts() {
-  return [...state.ownProducts, ...state.productCache.filter((product) => !state.ownProducts.some((own) => String(own.id) === String(product.id)))];
+  const all = [...state.ownProducts, ...state.productCache.filter((product) => !state.ownProducts.some((own) => String(own.id) === String(product.id)))];
+  // Past supplier purchases leave mirrored "donmarketplace:" products behind; never list those on the storefront.
+  return SUPPLIER_LOGS_ENABLED ? all : all.filter((product) => !/^donmarketplace:/i.test(String(product.id || '')));
 }
 
 function previewNotice() {
@@ -589,7 +594,7 @@ function marketplacePage() {
   return accountShell('marketplace', `${pageHeading('DISCOVER', 'Our Marketplace', 'The best services, with clear descriptions and availability details.')}
     <div class="market-toolbar"><form class="search-form" data-form="market-search">${icon('search', 18)}<input name="q" type="search" value="${escapeHTML(query)}" placeholder="Search products…"><button class="button button-small" type="submit">Search</button></form><label class="sort-control"><span>Sort by:</span><select data-change="sort"><option value="popular" ${sort === 'popular' ? 'selected' : ''}>Popular</option><option value="price_asc" ${sort === 'price_asc' ? 'selected' : ''}>Price: low to high</option><option value="price_desc" ${sort === 'price_desc' ? 'selected' : ''}>Price: high to low</option><option value="newest">Newest</option></select></label></div>
     <div class="market-layout"><aside class="category-filter"><span class="filter-title">CATEGORIES</span>${categories.map(([key, label]) => `<a data-link class="category-filter-link ${category === key ? 'active' : ''}" href="/marketplace${key === 'all' ? '' : `?category=${key}`}"><span class="category-mini-icon">${icon(key === 'virtual-numbers' ? 'phone' : key === 'logs' ? 'file' : 'grid', 16)}</span>${label}<span class="filter-arrow">›</span></a>`).join('')}${category !== 'virtual-numbers' ? platformFilter : ''}</aside>
-      <section class="market-results">${state.ownProductError ? `<div class="own-catalog-note">${escapeHTML(state.ownProductError)} <button class="link-button" data-action="retry-own-catalog">Retry own-stock catalog</button></div>` : ''}${catalogError}<div class="results-heading"><b>${state.productError ? 'Catalog unavailable' : state.productsLoading ? 'Loading services…' : `${list.length} services`}</b><span>Service availability is confirmed when you place an order.</span></div><div class="product-grid market-products">${catalogContent}</div>${category !== 'virtual-numbers' ? renderSupplierLogs({ signedIn: Boolean(state.user), loading: state.supplierLoading, error: state.supplierError, quotes: state.supplierQuotes, status: state.supplierStatus }) : ''}</section></div>`);
+      <section class="market-results">${state.ownProductError ? `<div class="own-catalog-note">${escapeHTML(state.ownProductError)} <button class="link-button" data-action="retry-own-catalog">Retry own-stock catalog</button></div>` : ''}${catalogError}<div class="results-heading"><b>${state.productError ? 'Catalog unavailable' : state.productsLoading ? 'Loading services…' : `${list.length} services`}</b><span>Service availability is confirmed when you place an order.</span></div><div class="product-grid market-products">${catalogContent}</div>${SUPPLIER_LOGS_ENABLED && category !== 'virtual-numbers' ? renderSupplierLogs({ signedIn: Boolean(state.user), loading: state.supplierLoading, error: state.supplierError, quotes: state.supplierQuotes, status: state.supplierStatus }) : ''}</section></div>`);
 }
 
 function productPage(id) {
@@ -1043,7 +1048,7 @@ function render() {
     state.loaded[route] = true;
     void loadAccountPage(route);
   }
-  if (route === '/marketplace' && state.user && !state.supplierLoaded && !state.supplierLoading) void loadSupplierQuotes();
+  if (SUPPLIER_LOGS_ENABLED && route === '/marketplace' && state.user && !state.supplierLoaded && !state.supplierLoading) void loadSupplierQuotes();
   if (route === '/wallet' && getApiBase() && state.user && !state.loaded.wallet) {
     state.loaded.wallet = true;
     void loadWalletAccount();
