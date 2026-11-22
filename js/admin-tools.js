@@ -198,6 +198,21 @@ const ADMIN_MOTION_CSS = `
 .ej-enter .ej-admin-metrics>*:nth-child(4),.ej-enter .ej-admin-insights>*:nth-child(3){animation-delay:.15s}
 .ej-enter .ej-admin-overview-grid>*,.ej-enter .ej-admin-quick-grid>*{animation-delay:.2s}
 .ej-admin-sidebar .ej-admin-nav-link,.ej-admin-quick-card,.ej-admin-panel{transition:transform .18s ease,box-shadow .18s ease,background .16s ease}
+.ej-admin-metrics.ej-ord-stats{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:1100px){.ej-admin-metrics.ej-ord-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:780px){.ej-admin-metrics.ej-ord-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ej-ord-filters{margin-bottom:16px}
+.ej-ord-table td small{display:block;color:var(--ej-muted);font-size:9px;margin-top:2px}
+.ej-ord-cust{display:flex;align-items:center;gap:8px;min-width:170px}
+.ej-ord-cust>span{display:grid}
+.ej-ord-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:8px;font-size:10px;font-weight:700;background:#F2F4F5;color:#625b55}
+.ej-ord-badge.completed,.ej-ord-badge.fulfilled,.ej-ord-badge.delivered{background:#EAF8F0;color:#26744D}
+.ej-ord-badge.processing,.ej-ord-badge.pending,.ej-ord-badge.waiting,.ej-ord-badge.dispatched,.ej-ord-badge.reserved{background:#FFF5E5;color:#A45B10}
+.ej-ord-badge.failed,.ej-ord-badge.cancelled,.ej-ord-badge.canceled{background:#FCECEA;color:#B44034}
+.ej-ord-badge.reconciliation{background:#FFEFD9;color:#9A5A0B}
+.ej-ord-badge.refunded{background:#EEF0F6;color:#4A5570}
+.ej-ord-sms{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;margin-top:3px}
+.ej-ord-sms.got{color:#26744D}.ej-ord-sms.wait{color:#A45B10}.ej-ord-sms.none{color:var(--ej-muted)}
 @media (prefers-reduced-motion:reduce){.ej-enter *{animation:none!important}.ej-admin-shell *{transition:none!important}}
 `;
 
@@ -272,7 +287,7 @@ export async function mountAdminTools(root, options = {}) {
   let lastAnimKey = '';
   let hiddenAt = 0;
   const state = {
-    summary: null, products: [], rules: [], imports: [], units: [], audits: [], supplier: null, checkoutOrders: [], recentOrders: [], recentAudits: [], orderFilter: 'All', supplierStatus: null, productTab: DON_LOGS_ENABLED ? 'DONMARKETPLACE' : 'OWN', selectedDonProduct: null,
+    summary: null, products: [], rules: [], imports: [], units: [], audits: [], supplier: null, checkoutOrders: [], recentOrders: [], recentAudits: [], orderFilter: 'All', orderQuery: '', orderStatus: 'ALL', orderType: 'ALL', supplierStatus: null, productTab: DON_LOGS_ENABLED ? 'DONMARKETPLACE' : 'OWN', selectedDonProduct: null,
     error: '', pageError: '', loading: false, drawer: null, editingProduct: null,
     productForm: emptyProduct(), socialStep: 1, socialGroup: '', pricingForm: emptyRule(), calculator: { cost: '', platform: '', productId: '', mode: 'FIXED', value: '', result: null, error: '' },
     inventory: { productId: '', status: '', query: '' }, upload: emptyUpload(), uploadResult: null,
@@ -308,7 +323,7 @@ export async function mountAdminTools(root, options = {}) {
   }
   function clearPrivateAdminState() {
     state.summary = null; state.products = []; state.rules = []; state.imports = []; state.units = []; state.audits = [];
-    state.supplier = null; state.checkoutOrders = []; state.recentOrders = []; state.recentAudits = []; state.orderFilter = 'All'; state.supplierStatus = null;
+    state.supplier = null; state.checkoutOrders = []; state.recentOrders = []; state.recentAudits = []; state.orderFilter = 'All'; state.orderQuery = ''; state.orderStatus = 'ALL'; state.orderType = 'ALL'; state.supplierStatus = null;
     state.error = ''; state.pageError = ''; state.loading = false; state.drawer = null; state.editingProduct = null; state.selectedDonProduct = null;
     state.productForm = emptyProduct(); state.socialStep = 1; state.socialGroup = ''; state.pricingForm = emptyRule();
     state.calculator = { cost: '', platform: '', productId: '', mode: 'FIXED', value: '', result: null, error: '' };
@@ -573,13 +588,60 @@ export async function mountAdminTools(root, options = {}) {
     const canCommit = result.status === 'VALIDATED' && result.canCommit && result.commitToken;
     return `<section class="ej-admin-panel ej-admin-validation-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">MASKED VALIDATION RESULT</span><h2>${escapeHTML(result.status || 'Result')}</h2></div><span class="ej-admin-status ${statusClass(result.status)}">${escapeHTML(result.status || '—')}</span></div><div class="ej-admin-validation-stats"><b>${escapeHTML(String(result.totalRows ?? 0))}<small>Total rows</small></b><b>${escapeHTML(String(result.validRows ?? 0))}<small>Valid rows</small></b><b>${escapeHTML(String(result.invalidRows ?? 0))}<small>Invalid rows</small></b><b>${escapeHTML(String(result.duplicateRows ?? 0))}<small>Duplicates</small></b></div>${diagnostics.length ? `<div class="ej-admin-diagnostics">${diagnostics.slice(0, 50).map((item) => `<div><span class="ej-admin-status ${statusClass(item.status)}">${escapeHTML(item.status)}</span><b>Line ${escapeHTML(item.line)}</b><small>${escapeHTML(item.code || 'Review returned diagnostic')}</small></div>`).join('')}</div>` : '<p class="ej-admin-muted">No row-level issues were returned. Credentials remain masked and are not displayed.</p>'}${canCommit ? `<div class="ej-admin-confirm-row"><label class="check-label"><input type="checkbox" data-admin-field="commit-authorization-confirmed"><span>I confirm I am authorized to import these records and want to commit ${escapeHTML(String(result.validRows))} encrypted unit(s).</span></label><button class="button" type="button" data-admin-action="commit-import" data-id="${escapeHTML(result.id)}">Confirm &amp; commit</button></div>` : ''}</section>`;
   }
+  // Orders: stats, search + filters, and one row per order with its customer, number and SMS state.
+  const ORDER_ACTIVE = ['PENDING', 'PROCESSING', 'WAITING', 'DISPATCHED', 'RESERVED'];
+  const ORDER_DONE = ['COMPLETED', 'FULFILLED', 'DELIVERED'];
+  const ORDER_ENDED = ['COMPLETED', 'FULFILLED', 'DELIVERED', 'FAILED', 'REFUNDED', 'CANCELLED', 'CANCELED'];
+  const ORDER_STATUS_ICON = { COMPLETED: 'check', FULFILLED: 'check', DELIVERED: 'check', PROCESSING: 'refresh', PENDING: 'refresh', WAITING: 'refresh', DISPATCHED: 'refresh', RESERVED: 'refresh', RECONCILIATION: 'warning', FAILED: 'close', CANCELLED: 'close', CANCELED: 'close', REFUNDED: 'refresh' };
+  const ORDER_STATUS_OPTIONS = [['ALL', 'All statuses'], ['PROCESSING', 'Processing'], ['WAITING', 'Waiting for SMS'], ['COMPLETED', 'Completed'], ['RECONCILIATION', 'Needs review'], ['FAILED', 'Failed'], ['REFUNDED', 'Refunded']];
+  function orderDisplayStatus(order) {
+    const status = String(order.status || '').toUpperCase();
+    const provider = String(order.providerState || '').toUpperCase();
+    if (status !== 'REFUNDED' && ['RECONCILIATION', 'WAITING', 'DISPATCHED', 'RESERVED'].includes(provider)) return provider;
+    return status || '—';
+  }
+  function orderIsRefunded(order) { return Boolean(order.refunded) || String(order.status).toUpperCase() === 'REFUNDED'; }
+  function orderSmsCell(order) {
+    if (order.type !== 'NUMBER') return '<span class="ej-admin-muted">—</span>';
+    const phone = order.phoneMasked ? `<code>${escapeHTML(order.phoneMasked)}</code>` : '<span class="ej-admin-unknown">No number yet</span>';
+    const ended = ORDER_ENDED.includes(orderDisplayStatus(order));
+    const count = Number(order.sms?.count || 0);
+    const sms = order.sms?.received
+      ? `<span class="ej-ord-sms got">${icon('check', 12)} SMS received${count > 1 ? ` (${count})` : ''}</span>`
+      : ended ? '<span class="ej-ord-sms none">No SMS received</span>' : `<span class="ej-ord-sms wait">${icon('refresh', 12)} Waiting for SMS</span>`;
+    return `${phone}<br>${sms}`;
+  }
+  function orderActionCell(order) {
+    if (orderIsRefunded(order)) return '<span class="ej-admin-muted">Refunded</span>';
+    if (order.type === 'NUMBER') return '<span class="ej-admin-muted">Auto-managed</span>';
+    const blocked = order.refundable === false || ['FAILED', 'CANCELLED', 'CANCELED'].includes(String(order.status).toUpperCase());
+    if (blocked) return '<span class="ej-admin-muted">—</span>';
+    return `<button class="button button-small button-outline" type="button" data-admin-action="refund-order" data-id="${escapeHTML(order.id || '')}">Refund</button>`;
+  }
   function ordersPage() {
-    const allRows = state.checkoutOrders;
-    const filterKey = state.orderFilter || 'All';
-    const groups = { All: () => true, Active: (o) => ['PENDING', 'PROCESSING'].includes(String(o.status).toUpperCase()), Completed: (o) => ['COMPLETED', 'FULFILLED', 'DELIVERED'].includes(String(o.status).toUpperCase()), 'Needs review': (o) => ['RECONCILIATION', 'FAILED'].includes(String(o.status).toUpperCase()), Refunded: (o) => String(o.status).toUpperCase() === 'REFUNDED' };
-    const rows = allRows.filter(groups[filterKey] || groups.All);
-    const orderFilters = `<div class="ej-admin-filter-row" role="group" aria-label="Filter orders">${Object.keys(groups).map((name) => `<button type="button" class="ej-admin-filter ${filterKey === name ? 'active' : ''}" aria-pressed="${filterKey === name}" data-admin-action="order-filter" data-filter="${name}">${name}<span>${allRows.filter(groups[name]).length}</span></button>`).join('')}</div>`;
-    return shell(`${header('CHECKOUT', 'Checkout and refunds', 'Live commerce records with private details hidden. Refunds credit the customer wallet for the full original purchase amount; they are not bank refunds.', `<button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 14)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}${allRows.length ? orderFilters : ''}<section class="ej-admin-panel ej-admin-table-panel">${state.loading ? loadingBox() : rows.length ? `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>Amount</th><th>Updated</th><th></th></tr></thead><tbody>${rows.map((order) => `<tr><td><code>${escapeHTML(order.id || order.orderReference || '—')}</code></td><td>${escapeHTML(order.customerEmail || order.userEmail || 'Redacted')}</td><td><span class="ej-admin-status ${statusClass(order.status)}">${escapeHTML(order.status || '—')}</span></td><td>${orderAmountLabel(order)}</td><td>${dateLabel(order.updatedAt || order.createdAt)}</td><td><button class="button button-small button-outline" type="button" data-admin-action="refund-order" data-id="${escapeHTML(order.id || '')}" ${['REFUNDED', 'CANCELLED'].includes(String(order.status).toUpperCase()) ? 'disabled' : ''}>Full wallet refund</button></td></tr>`).join('')}</tbody></table></div>` : emptyState('No commerce orders returned', 'No orders were returned. No demo balances or order counts are shown.', 'orders')}</section>`);
+    const all = state.checkoutOrders;
+    const query = state.orderQuery.trim().toLowerCase();
+    const rows = all.filter((order) => {
+      if (state.orderStatus !== 'ALL' && orderDisplayStatus(order) !== state.orderStatus) return false;
+      if (state.orderType !== 'ALL' && (order.type || 'LOG') !== state.orderType) return false;
+      if (!query) return true;
+      return [order.id, order.orderReference, order.productName, order.service, order.country, order.provider, order.userName, order.userEmail, order.customerEmail]
+        .some((value) => String(value || '').toLowerCase().includes(query));
+    });
+    const refunded = all.filter(orderIsRefunded).length;
+    const active = all.filter((order) => ORDER_ACTIVE.includes(orderDisplayStatus(order))).length;
+    const completed = all.filter((order) => ORDER_DONE.includes(orderDisplayStatus(order))).length;
+    const revenue = all.filter((order) => ORDER_DONE.includes(String(order.status).toUpperCase()) && !orderIsRefunded(order)).reduce((sum, order) => sum + (Number(order.total) || 0), 0);
+    const revenueLabel = `₦${revenue.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const table = `<div class="ej-admin-table-wrap"><table class="ej-admin-table ej-ord-table"><thead><tr><th>Order</th><th>Product</th><th>Customer</th><th>Number &amp; SMS</th><th>Amount</th><th>Status</th><th>Date</th><th>Action</th></tr></thead><tbody>${rows.map((order) => {
+      const status = orderDisplayStatus(order);
+      const kind = order.type === 'NUMBER' ? 'Virtual number' : 'Log';
+      const detail = [kind, order.provider, order.country].filter(Boolean).join(' · ');
+      const name = order.userName || order.customerEmail || 'Unknown';
+      const email = order.userEmail || order.customerEmail || 'Redacted';
+      return `<tr><td><code>${escapeHTML(order.orderReference || order.id || '—')}</code></td><td><b>${escapeHTML(order.productName || order.service || '—')}</b><small>${escapeHTML(detail)}</small></td><td><div class="ej-ord-cust">${icon('user', 14)}<span><b>${escapeHTML(name)}</b><small>${escapeHTML(email)}</small></span></div></td><td>${orderSmsCell(order)}</td><td><b>${orderAmountLabel(order)}</b></td><td><span class="ej-ord-badge ${statusClass(status)}">${icon(ORDER_STATUS_ICON[status] || 'refresh', 12)} ${escapeHTML(status.charAt(0) + status.slice(1).toLowerCase().replaceAll('_', ' '))}</span></td><td>${dateLabel(order.createdAt || order.updatedAt)}</td><td>${orderActionCell(order)}</td></tr>`;
+    }).join('')}</tbody></table></div>`;
+    return shell(`${header('ORDERS', 'Orders', 'Manage every log and virtual number order across the platform. Refunds credit the customer wallet for the full original amount; they are not bank refunds.', `<button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 14)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}<section class="ej-admin-metrics ej-ord-stats">${metric('Total orders', String(all.length), 'All time', 'orders', 'orange')}${metric('Active', String(active), 'Waiting or processing', 'refresh', 'brown')}${metric('Completed', String(completed), 'Delivered to customers', 'check', 'green')}${metric('Refunded', String(refunded), 'Credited back to wallets', 'refresh', 'yellow')}${metric('Revenue', revenueLabel, 'Completed, not refunded', 'chart', 'green')}</section><div class="ej-admin-filter-bar ej-ord-filters"><label class="ej-admin-search">${icon('search', 16)}<input data-admin-field="orders-query" type="search" value="${escapeHTML(state.orderQuery)}" placeholder="Search by order, product, country, customer or provider"></label><label>Status<select data-admin-field="orders-status">${ORDER_STATUS_OPTIONS.map(([value, label]) => `<option value="${value}" ${state.orderStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Type<select data-admin-field="orders-type">${[['ALL', 'All types'], ['LOG', 'Logs'], ['NUMBER', 'Virtual numbers']].map(([value, label]) => `<option value="${value}" ${state.orderType === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><section class="ej-admin-panel ej-admin-table-panel">${state.loading ? loadingBox() : rows.length ? table : emptyState(all.length ? 'No orders match your filters' : 'No orders yet', all.length ? 'Try a different search, status or type.' : 'Orders will appear here once customers check out.', 'orders')}</section>`);
   }
 
   // Reads the real shape returned by GET /providers/status:
@@ -953,6 +1015,17 @@ export async function mountAdminTools(root, options = {}) {
     root.querySelectorAll('[data-admin-form="upload"]').forEach((form) => { form.addEventListener('input', () => { syncUploadForm(form); }); form.addEventListener('change', () => { syncUploadForm(form); }); form.addEventListener('submit', (event) => { event.preventDefault(); void validateUpload(form); }); });
     root.querySelectorAll('[data-admin-file="jsonl"]').forEach((input) => input.addEventListener('change', async () => { const file = input.files?.[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { state.upload.error = 'The JSONL file is larger than 2 MiB.'; input.value = ''; render(); return; } try { state.upload.content = await file.text(); input.value = ''; state.upload.source = 'file'; state.upload.error = ''; render(); } catch { input.value = ''; state.upload.content = ''; state.upload.error = 'The selected file could not be read.'; render(); } }));
     root.querySelectorAll('[data-admin-field="inventory-product"], [data-admin-field="inventory-status"]').forEach((input) => input.addEventListener('change', async () => { if (input.dataset.adminField === 'inventory-product') state.inventory.productId = input.value; else state.inventory.status = input.value; state.pageError = ''; await loadUnits(revision); render(); }));
+    root.querySelectorAll('[data-admin-field="orders-query"]').forEach((input) => input.addEventListener('input', () => {
+      state.orderQuery = input.value;
+      const caret = input.selectionStart ?? input.value.length;
+      render();
+      const next = root.querySelector('[data-admin-field="orders-query"]');
+      if (next) { next.focus(); try { next.setSelectionRange(caret, caret); } catch { /* not supported */ } }
+    }));
+    root.querySelectorAll('[data-admin-field="orders-status"], [data-admin-field="orders-type"]').forEach((select) => select.addEventListener('change', () => {
+      if (select.dataset.adminField === 'orders-status') state.orderStatus = select.value; else state.orderType = select.value;
+      render();
+    }));
     root.querySelectorAll('[data-admin-field="inventory-query"]').forEach((input) => input.addEventListener('input', () => { state.inventory.query = input.value; const rows = root.querySelectorAll('.ej-admin-table tbody tr'); rows.forEach((row) => row.hidden = !row.textContent.toLowerCase().includes(input.value.toLowerCase())); }));
   }
 

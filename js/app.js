@@ -50,6 +50,7 @@ const state = {
   numberOrder: null,
   numberLoading: false,
   numberOrderLoading: false,
+  numberOrderRefreshing: false,
   numberError: '',
   supplierQuotes: [],
   supplierStatus: null,
@@ -63,6 +64,10 @@ let sessionCheckTimer = null;
 let sessionCheckPending = false;
 let hiddenAt = 0;
 let numbersRequestSeq = 0;
+let numberPollTimer = null;
+let numberPollId = '';
+let numberPollFailures = 0;
+let numberRefreshInFlight = false;
 const SESSION_EXPIRED_MESSAGE = 'Your session has ended. Please sign in again.';
 
 const paths = {
@@ -1067,6 +1072,7 @@ function render() {
     && state.orderDetail?.id !== route.slice('/orders/'.length)) {
     void loadOrderDetail(route.slice('/orders/'.length));
   }
+  syncNumberPolling();
 }
 
 function navigate(target) {
@@ -1173,6 +1179,8 @@ document.addEventListener('visibilitychange', () => {
   const away = hiddenAt ? Date.now() - hiddenAt : 0;
   hiddenAt = 0;
   if (away > 5_000) recoverStuckLoading();
+  syncNumberPolling();
+  if (numberPollTimer) void refreshNumberOrder(numberPollId, { silent: true });
   // Re-check the session only after a real absence, and never stack checks.
   if (away > 30_000 && state.user && !sessionCheckPending) {
     sessionCheckPending = true;
@@ -1362,6 +1370,76 @@ async function loadNumbersCatalog() {
       state.numberLoading = false;
       if (window.location.pathname.replace(/\/$/, '') === '/numbers') render();
     }
+  }
+}
+
+// ---- Virtual number SMS: live status ----------------------------------------------------------------
+// While a number order is open and not finished, ask the server for new SMS every few seconds. The page is
+// only redrawn when something changed, so selecting or copying the number is never interrupted.
+const NUMBER_ORDER_ENDED = ['COMPLETED', 'CANCELLED', 'CANCELED', 'FAILED', 'FINISHED', 'REFUNDED', 'RECONCILIATION'];
+
+function numberOrderStatus(order) { return String(order?.state || order?.status || 'PROCESSING').toUpperCase(); }
+
+function numberOrderSignature(order) {
+  const session = order?.session || {};
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  return JSON.stringify([numberOrderStatus(order), session.phone || session.number || '', session.code || '', session.status || '', messages.map((m) => m?.code || m?.text || m?.body || ''), order?.canFinish, order?.canCancel, order?.statusCheck]);
+}
+
+function numberOrderRouteId() {
+  const match = window.location.pathname.replace(/\/$/, '').match(/^\/numbers\/orders\/(.+)$/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
+function stopNumberPolling() {
+  if (numberPollTimer) window.clearInterval(numberPollTimer);
+  numberPollTimer = null;
+  numberPollId = '';
+}
+
+function syncNumberPolling() {
+  const id = numberOrderRouteId();
+  const order = state.numberOrder;
+  const live = Boolean(id && state.user && getApiBase() && order && !state.numberOrderLoading && !NUMBER_ORDER_ENDED.includes(numberOrderStatus(order)));
+  if (!live) { stopNumberPolling(); return; }
+  if (numberPollTimer && numberPollId === id) return;
+  stopNumberPolling();
+  numberPollId = id;
+  numberPollFailures = 0;
+  numberPollTimer = window.setInterval(() => {
+    if (document.visibilityState === 'hidden') return;
+    void refreshNumberOrder(id, { silent: true });
+  }, 6_000);
+}
+
+async function refreshNumberOrder(id, { silent = false } = {}) {
+  if (silent && numberOrderRouteId() !== id) { stopNumberPolling(); return; }
+  if (!state.user || !getApiBase() || numberRefreshInFlight) return;
+  numberRefreshInFlight = true;
+  let needsRender = !silent;
+  if (!silent) { state.numberOrderRefreshing = true; state.numberError = ''; render(); }
+  const before = state.numberOrder;
+  try {
+    const result = await api.numberOrder(id);
+    if (numberOrderRouteId() !== id) return;
+    const next = result.order || result;
+    numberPollFailures = 0;
+    const changed = numberOrderSignature(before) !== numberOrderSignature(next);
+    const beforeCount = before?.session?.messages?.length || 0;
+    const afterCount = next?.session?.messages?.length || 0;
+    const gotCode = Boolean(next?.session?.code) && !before?.session?.code;
+    state.numberOrder = { ...next, orderId: next?.orderId ?? before?.orderId };
+    state.numberError = '';
+    if (changed) needsRender = true;
+    if (gotCode || afterCount > beforeCount) toast(gotCode ? 'Verification code received.' : 'New SMS received.', 'success');
+  } catch (error) {
+    numberPollFailures += 1;
+    if (!silent) { state.numberError = [401, 403].includes(error.status) ? 'This number order is not available to the signed-in account.' : error.message || 'Number order status is unavailable.'; needsRender = true; }
+    if (silent && numberPollFailures >= 3) stopNumberPolling();
+  } finally {
+    numberRefreshInFlight = false;
+    if (!silent) state.numberOrderRefreshing = false;
+    if (needsRender && numberOrderRouteId() === id) render();
   }
 }
 
@@ -1696,7 +1774,10 @@ function bindEvents() {
     }
     if (action === 'number-refresh' || action === 'numbers-retry') {
       if (action === 'numbers-retry') { state.loaded.numbers = false; void loadNumbersCatalog(); }
-      else { const id = window.location.pathname.split('/').at(-1); if (id) void loadNumberOrder(decodeURIComponent(id)); }
+      else {
+        const id = numberOrderRouteId();
+        if (id) { if (state.numberOrder) void refreshNumberOrder(id); else void loadNumberOrder(id); }
+      }
     }
     if (action === 'number-finish' || action === 'number-cancel') {
       const id = state.numberOrder?.orderId || window.location.pathname.split('/').at(-1);
