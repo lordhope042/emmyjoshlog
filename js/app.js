@@ -446,6 +446,67 @@ function initLanding() {
   }
 }
 
+const FOOTER_CSS = `
+.sf{--sf-ink:#1c0f08;--sf-line:rgba(255,255,255,.12);--sf-muted:#cdb9a6;--sf-o:#ff9a4d;background:var(--sf-ink);color:#fff;margin-top:72px}
+.sf a{color:inherit;text-decoration:none}
+.sf a:focus-visible,.sf button:focus-visible{outline:3px solid var(--sf-o);outline-offset:3px;border-radius:8px}
+.sf-inner{max-width:1200px;margin:0 auto;padding:64px 24px 28px}
+.sf-grid{display:grid;grid-template-columns:1.5fr repeat(3,1fr);gap:48px}
+.sf-badge{display:inline-flex;background:#fff;border-radius:14px;padding:8px 16px}
+.sf-badge .brand-logo{display:block;height:44px;width:auto;max-width:none}
+.sf-brand p{margin:18px 0 0;max-width:30ch;line-height:1.6;color:var(--sf-muted);font-size:.9375rem}
+.sf-cta{display:inline-flex;align-items:center;gap:8px;margin-top:22px;padding:11px 20px;border-radius:999px;background:var(--sf-o);color:var(--sf-ink)!important;font-weight:700;font-size:.9rem;transition:transform .2s ease}
+.sf-cta:hover{transform:translateY(-2px)}
+.sf-col{display:flex;flex-direction:column;gap:11px}
+.sf-col h3{margin:0 0 5px;font-size:.8125rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sf-o)}
+.sf-col a{color:#f3e8dc;font-size:.9375rem;width:fit-content;background:linear-gradient(currentColor,currentColor) 0 100%/0 1px no-repeat;transition:background-size .25s ease,color .2s ease}
+.sf-col a:hover{color:#fff;background-size:100% 1px}
+.sf-bottom{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-top:48px;padding-top:24px;border-top:1px solid var(--sf-line);color:var(--sf-muted);font-size:.875rem}
+.sf-bottom-links{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.sf-bottom a:hover{color:#fff}
+.sf-top{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;border:1px solid var(--sf-line);background:transparent;color:#fff;font:inherit;font-size:.8125rem;font-weight:600;cursor:pointer;transition:background .2s ease}
+.sf-top:hover{background:rgba(255,255,255,.08)}
+.sf-top svg{transform:rotate(-90deg)}
+@media (max-width:900px){.sf-grid{grid-template-columns:1fr 1fr;gap:36px 28px}.sf-brand{grid-column:1/-1}}
+@media (max-width:520px){.sf-inner{padding-top:48px}.sf-grid{grid-template-columns:1fr}.sf-bottom{flex-direction:column;align-items:flex-start}}
+@media (prefers-reduced-motion:reduce){.sf *{transition:none!important}}
+`;
+
+function ensureFooterStyles() {
+  if (document.getElementById('sf-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'sf-styles';
+  style.textContent = FOOTER_CSS;
+  document.head.appendChild(style);
+}
+
+// The site footer shared by the public pages (landing and support).
+function siteFooter() {
+  ensureFooterStyles();
+  const links = (items) => items.map(([href, label]) => `<a data-link href="${href}">${label}</a>`).join('');
+  const accountLinks = state.user
+    ? [['/dashboard', 'Dashboard'], ['/wallet', 'Wallet'], ['/orders', 'My orders'], ['/numbers', 'Virtual numbers']]
+    : [['/login', 'Login'], ['/register', 'Create an account']];
+  return `<footer class="sf">
+    <div class="sf-inner">
+      <div class="sf-grid">
+        <div class="sf-brand">
+          <a class="sf-badge" data-link href="/" aria-label="Emmyjosh Logs home">${logo()}</a>
+          <p>Your trusted logs and virtual number hub. Fund one Naira wallet and collect your delivery from your orders page.</p>
+          <a class="sf-cta" data-link href="/marketplace">Browse the marketplace ${icon('arrow', 16)}</a>
+        </div>
+        <nav class="sf-col" aria-label="Marketplace"><h3>Marketplace</h3>${links([['/marketplace', 'All services'], ['/marketplace?category=logs', 'Logs'], ['/marketplace?category=virtual-numbers', 'Virtual numbers']])}</nav>
+        <nav class="sf-col" aria-label="Account"><h3>Account</h3>${links(accountLinks)}</nav>
+        <nav class="sf-col" aria-label="Support"><h3>Support</h3>${links([['/support#contact', 'Contact support'], ['/support#about', 'About us'], ['/support#terms', 'Terms of service'], ['/support#privacy', 'Privacy policy'], ['/support#refunds', 'Refund information'], ['/support#password', 'Password recovery']])}</nav>
+      </div>
+      <div class="sf-bottom">
+        <span>© ${new Date().getFullYear()} Emmyjosh Logs Marketplace. All rights reserved.</span>
+        <div class="sf-bottom-links"><a data-link href="/admin/login">Admin</a><button class="sf-top" type="button" data-action="scroll-top">Back to top ${icon('arrow', 14)}</button></div>
+      </div>
+    </div>
+  </footer>`;
+}
+
 function landingPage() {
   ensureLandingStyles();
   const featured = catalogProducts().slice(0, 3);
@@ -497,7 +558,7 @@ function landingPage() {
 
       <section class="lp-close lp-rv"><div><h2>Ready to place your first order?</h2><p>Create an account, fund your wallet, and check out in a few minutes.</p></div><a class="lp-pill lp-pill-o" data-link href="${state.user ? '/marketplace' : '/register'}">${state.user ? 'Go to the marketplace' : 'Create an account'} ${icon('arrow', 16)}</a></section>
     </div>
-    <footer class="public-footer page-wrap"><a data-link href="/">${logo('footer-logo')}</a><p>Emmyjosh Logs Marketplace</p><div><a data-link href="/admin/login">Admin</a><a data-link href="/support">Support</a><a data-link href="/support#terms">Terms</a><a data-link href="/support#privacy">Privacy</a></div></footer>
+    ${siteFooter()}
   </div>`;
 }
 
@@ -927,7 +988,7 @@ function notificationsPage() {
 }
 
 function supportPage() {
-  return `<div class="site-public">${publicHeader()}<main class="support-page page-wrap">${previewNotice()}<section class="support-hero" id="about"><div><span class="eyebrow">ABOUT EMMYJOSH LOGS</span><h1>Digital services,<br><span>made clearer.</span></h1><p>Emmyjosh Logs Marketplace brings together lawful digital services and account tools in a straightforward experience.</p><a data-link class="button" href="/marketplace">Explore marketplace ${icon('arrow', 17)}</a></div><div class="support-brand-visual">${logo('support-logo')}<span>YOUR TRUSTED LOGS &amp; VIRTUAL NUMBER HUB</span><div class="support-swoosh"></div></div></section><section class="support-content-grid"><article class="panel" id="contact"><div class="panel-head"><div><span class="eyebrow">WE’RE HERE TO HELP</span><h2>Contact support</h2></div>${icon('help', 23, 'panel-head-icon')}</div><p>Send a question or tell us what you need help with. A ticket is only recorded when the support API confirms it.</p><form class="stack-form" data-form="support"><label>Subject<input name="subject" required minlength="3" maxlength="160" placeholder="How can we help?"></label><label>Message<textarea name="body" required minlength="3" maxlength="4000" rows="5" placeholder="Share a few details…"></textarea></label><button class="button" type="submit">Send support request ${icon('arrow', 17)}</button><p class="form-feedback" data-feedback></p></form></article><aside class="policy-panel"><span class="eyebrow">HELPFUL INFORMATION</span><a id="terms" href="#terms">Terms of service <small>Content pending</small><span>›</span></a><a id="privacy" href="#privacy">Privacy policy <small>Content pending</small><span>›</span></a><a id="refunds" href="#refunds">Refund information <small>Content pending</small><span>›</span></a><a id="password" href="#password">Password recovery <small>Not configured</small><span>›</span></a><div class="policy-note">${icon('shield', 18)}<p>Payment questions are reviewed against verified provider records. Official policy copy has not been provided yet.</p></div></aside></section></main><footer class="public-footer page-wrap"><a data-link href="/">${logo('footer-logo')}</a><p>Emmyjosh Logs Marketplace</p><div><a data-link href="/admin/login">Admin</a><a data-link href="/support">Support</a><a data-link href="/support#terms">Terms</a><a data-link href="/support#privacy">Privacy</a></div></footer></div><div class="toast-slot" aria-live="polite"></div>`;
+  return `<div class="site-public">${publicHeader()}<main class="support-page page-wrap">${previewNotice()}<section class="support-hero" id="about"><div><span class="eyebrow">ABOUT EMMYJOSH LOGS</span><h1>Digital services,<br><span>made clearer.</span></h1><p>Emmyjosh Logs Marketplace brings together lawful digital services and account tools in a straightforward experience.</p><a data-link class="button" href="/marketplace">Explore marketplace ${icon('arrow', 17)}</a></div><div class="support-brand-visual">${logo('support-logo')}<span>YOUR TRUSTED LOGS &amp; VIRTUAL NUMBER HUB</span><div class="support-swoosh"></div></div></section><section class="support-content-grid"><article class="panel" id="contact"><div class="panel-head"><div><span class="eyebrow">WE’RE HERE TO HELP</span><h2>Contact support</h2></div>${icon('help', 23, 'panel-head-icon')}</div><p>Send a question or tell us what you need help with. A ticket is only recorded when the support API confirms it.</p><form class="stack-form" data-form="support"><label>Subject<input name="subject" required minlength="3" maxlength="160" placeholder="How can we help?"></label><label>Message<textarea name="body" required minlength="3" maxlength="4000" rows="5" placeholder="Share a few details…"></textarea></label><button class="button" type="submit">Send support request ${icon('arrow', 17)}</button><p class="form-feedback" data-feedback></p></form></article><aside class="policy-panel"><span class="eyebrow">HELPFUL INFORMATION</span><a id="terms" href="#terms">Terms of service <small>Content pending</small><span>›</span></a><a id="privacy" href="#privacy">Privacy policy <small>Content pending</small><span>›</span></a><a id="refunds" href="#refunds">Refund information <small>Content pending</small><span>›</span></a><a id="password" href="#password">Password recovery <small>Not configured</small><span>›</span></a><div class="policy-note">${icon('shield', 18)}<p>Payment questions are reviewed against verified provider records. Official policy copy has not been provided yet.</p></div></aside></section></main>${siteFooter()}</div><div class="toast-slot" aria-live="polite"></div>`;
 }
 
 function adminSidebar(active) {
@@ -1629,6 +1690,7 @@ function bindEvents() {
     if (action === 'retry-own-catalog') { state.ownProductsLoaded = true; void loadOwnCatalog(); return; }
     if (action === 'menu') { state.menuOpen = !state.menuOpen; app.querySelectorAll('.public-nav, .app-sidebar').forEach((el) => el.classList.toggle('open', state.menuOpen)); }
     if (action === 'dismiss-toast') control.closest('.toast')?.remove();
+    if (action === 'scroll-top') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (action === 'logout') {
       const hadSession = Boolean(state.user);
       clearPrivateCaches(); state.user = null; state.profile = null; state.signedOut = true;
