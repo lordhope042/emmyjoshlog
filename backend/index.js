@@ -1018,7 +1018,24 @@ function createAdminRouter(options = {}) {
       rows(db(), 'SELECT COUNT(*) AS count FROM ej_admin_pricing_rules'),
     ]);
 
+    // Customer accounts only (admins live in ej_admin_users). Never let this break the whole summary.
+    let totalUsers = 0;
+    let newUsers = 0;
+    try {
+      const u = await rows(
+        db(),
+        `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN "createdAt" >= ? THEN 1 ELSE 0 END) AS recent
+         FROM "User" WHERE "role" = 'CUSTOMER'`,
+        [new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)],
+      );
+      totalUsers = Number(u[0]?.total || 0);
+      newUsers = Number(u[0]?.recent || 0);
+    } catch { /* leave zeros */ }
+
     res.json({
+      totalUsers,
+      newUsers,
       products: Number(products[0].count),
       available: Number(available[0].count),
       imports: Number(imports[0].count),
