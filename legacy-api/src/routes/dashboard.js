@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const prisma = require('../db');
+const { countUnreadBroadcasts } = require('../lib/broadcasts');
 const { requireAuth } = require('../middleware/auth');
 
 router.use(requireAuth);
@@ -8,7 +9,7 @@ router.use(requireAuth);
 router.get('/summary', async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const [wallet, totalOrders, activeNumbers, unread, recentOrders, recentTx] = await Promise.all([
+    const [wallet, totalOrders, activeNumbers, unreadOwn, recentOrders, recentTx, unreadBroadcasts] = await Promise.all([
       prisma.wallet.findUnique({ where: { userId } }),
       prisma.order.count({ where: { userId } }),
       prisma.orderItem.count({
@@ -17,7 +18,9 @@ router.get('/summary', async (req, res, next) => {
       prisma.notification.count({ where: { userId, readAt: null } }),
       prisma.order.findMany({ where: { userId }, select: { id: true, orderReference: true, subtotal: true, fees: true, total: true, currency: true, status: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' }, take: 5 }),
       prisma.walletTransaction.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 5 }),
+      countUnreadBroadcasts(prisma, userId),
     ]);
+    const unread = unreadOwn + unreadBroadcasts;
     res.json({
       walletBalance: wallet?.balance ?? 0,
       currency: wallet?.currency ?? 'NGN',

@@ -41,6 +41,12 @@ const fallbackIcons = {
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
   chart: '<path d="M4 19V5M4 19h17"/><path d="m7 15 4-4 3 2 6-7"/>',
   calculator: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2m4 0h2M8 15h2m4 0h2M8 18h2m4 0h2"/>',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  telegram: '<path d="M21 4 3 11l6 2 2 6 3-4.5 5 3.5L21 4Z"/><path d="m9 13 12-9"/>',
+  whatsapp: '<path d="M20 12a8 8 0 0 1-11.7 7.1L4 20l1-4.2A8 8 0 1 1 20 12Z"/><path d="M9 9.5c.5 2.5 2.5 4.5 5.5 5.5l1-1.5-2-1-1 .8c-.8-.4-1.5-1.1-1.9-1.9l.8-1-1-2L9 9.5Z"/>',
   external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/>',
 };
 
@@ -92,6 +98,16 @@ function orderAmountLabel(order) {
   if (minor !== undefined && minor !== null && minor !== '') return minorMoneyLabel(minor);
   if (order?.total !== undefined && order?.total !== null && order?.total !== '') return moneyLabel(order.total);
   return 'Unknown';
+}
+const NOTIF_LABELS = { WHATSAPP: 'Chat on WhatsApp', TELEGRAM: 'Join on Telegram', LINK: 'Open link' };
+const NOTIF_ICON = { WHATSAPP: 'whatsapp', TELEGRAM: 'telegram', LINK: 'link' };
+function clientLinkKind(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host === 'wa.me' || host === 'whatsapp.com' || host.endsWith('.whatsapp.com')) return 'WHATSAPP';
+    if (host === 't.me' || host === 'telegram.me' || host === 'telegram.org' || host.endsWith('.telegram.org')) return 'TELEGRAM';
+  } catch { /* not a full address yet */ }
+  return 'LINK';
 }
 function statusClass(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
@@ -213,6 +229,23 @@ const ADMIN_MOTION_CSS = `
 .ej-ord-badge.refunded{background:#EEF0F6;color:#4A5570}
 .ej-ord-sms{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;margin-top:3px}
 .ej-ord-sms.got{color:#26744D}.ej-ord-sms.wait{color:#A45B10}.ej-ord-sms.none{color:var(--ej-muted)}
+.ej-nl{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:999px;background:#E8650A;color:#fff!important;font-size:10px;font-weight:700;text-decoration:none;white-space:nowrap}
+.ej-nl-whatsapp{background:#25D366}
+.ej-nl-telegram{background:#229ED9}
+.ej-notif-table td{vertical-align:top}
+.ej-notif-title{min-width:240px;max-width:380px}
+.ej-notif-title b{display:block;margin-bottom:3px}
+.ej-notif-title small{display:block;white-space:normal;color:var(--ej-muted);font-size:10px;line-height:1.5}
+.ej-notif-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ej-notif-link-box{display:grid;gap:10px;padding:14px;border:1px solid #F0E4D9;border-radius:12px;background:#FFFBF6}
+.ej-notif-presets{display:flex;gap:8px;flex-wrap:wrap}
+.ej-notif-preset{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--ej-border);border-radius:999px;background:#fff;color:var(--ej-brown);font-size:10px;font-weight:700;cursor:pointer}
+.ej-notif-preset:hover{border-color:var(--ej-orange)}
+.ej-notif-preview{display:grid;gap:8px;padding:14px;border:1px dashed #E4D3C2;border-radius:14px;background:#fff}
+.ej-notif-preview-card{display:flex;gap:11px;align-items:flex-start}
+.ej-notif-preview-icon{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:10px;background:var(--ej-orange-soft);color:var(--ej-orange-dark)}
+.ej-notif-preview-card b{display:block;font-size:12px}
+.ej-notif-preview-card p{margin:4px 0 10px;color:var(--ej-muted);font-size:11px;line-height:1.5;white-space:pre-wrap}
 @media (prefers-reduced-motion:reduce){.ej-enter *{animation:none!important}.ej-admin-shell *{transition:none!important}}
 `;
 
@@ -287,7 +320,7 @@ export async function mountAdminTools(root, options = {}) {
   let lastAnimKey = '';
   let hiddenAt = 0;
   const state = {
-    summary: null, products: [], rules: [], imports: [], units: [], audits: [], supplier: null, checkoutOrders: [], recentOrders: [], recentAudits: [], orderFilter: 'All', orderQuery: '', orderStatus: 'ALL', orderType: 'ALL', supplierStatus: null, productTab: DON_LOGS_ENABLED ? 'DONMARKETPLACE' : 'OWN', selectedDonProduct: null,
+    summary: null, products: [], rules: [], imports: [], units: [], audits: [], supplier: null, checkoutOrders: [], recentOrders: [], recentAudits: [], orderFilter: 'All', orderQuery: '', orderStatus: 'ALL', orderType: 'ALL', supplierStatus: null, productTab: DON_LOGS_ENABLED ? 'DONMARKETPLACE' : 'OWN', selectedDonProduct: null, notifications: [], notificationForm: emptyNotification(), editingNotification: null,
     error: '', pageError: '', loading: false, drawer: null, editingProduct: null,
     productForm: emptyProduct(), socialStep: 1, socialGroup: '', pricingForm: emptyRule(), calculator: { cost: '', platform: '', productId: '', mode: 'FIXED', value: '', result: null, error: '' },
     inventory: { productId: '', status: '', query: '' }, upload: emptyUpload(), uploadResult: null,
@@ -315,6 +348,9 @@ export async function mountAdminTools(root, options = {}) {
       minQty: product.minQty ?? 1, maxQty: product.maxQty ?? 1, supplierProductId: product.supplierProductId || '',
     };
   }
+  function emptyNotification(item = {}) {
+    return { title: item.title || '', message: item.message || '', linkUrl: item.linkUrl || '', linkLabel: item.linkLabel || '' };
+  }
   function emptyRule(rule = {}) {
     return { id: rule.id || '', scope: rule.scope || 'DEFAULT', scopeKey: rule.scopeKey || 'logs', mode: rule.mode || 'FIXED', value: rule.value ?? '' };
   }
@@ -329,6 +365,7 @@ export async function mountAdminTools(root, options = {}) {
     state.calculator = { cost: '', platform: '', productId: '', mode: 'FIXED', value: '', result: null, error: '' };
     state.inventory = { productId: '', status: '', query: '' };
     state.upload = emptyUpload(); state.uploadResult = null;
+    state.notifications = []; state.notificationForm = emptyNotification(); state.editingNotification = null;
     state.inventoryError = ''; state.productsError = ''; state.rulesError = ''; state.importsError = ''; state.auditError = ''; state.unitsError = '';
   }
   // Reads rely on the in-page skeleton, so only writes (and explicitly labelled reads) raise the global overlay.
@@ -407,6 +444,8 @@ export async function mountAdminTools(root, options = {}) {
         if (!isCurrent(token)) return; state.imports = Array.isArray(result.imports) ? result.imports : [];
       } else if (path === '/admin/orders' || path === '/admin/checkout') {
         const result = await request('/commerce/orders'); if (!isCurrent(token)) return; state.checkoutOrders = Array.isArray(result.orders) ? result.orders : [];
+      } else if (path === '/admin/notifications') {
+        const result = await request('/notifications'); if (!isCurrent(token)) return; state.notifications = Array.isArray(result.notifications) ? result.notifications : [];
       } else if (path === '/admin/supplier') {
         const result = await request('/providers/status'); if (!isCurrent(token)) return; state.supplierStatus = result;
       } else if (path === '/admin/audit-logs') {
@@ -422,6 +461,10 @@ export async function mountAdminTools(root, options = {}) {
     const result = await request('/products'); if (!isCurrent(token)) return;
     state.products = Array.isArray(result.products) ? result.products : [];
   }
+  async function loadNotifications(token = revision) {
+    const result = await request('/notifications'); if (!isCurrent(token)) return;
+    state.notifications = Array.isArray(result.notifications) ? result.notifications : [];
+  }
   async function loadUnits(token = revision) {
     const params = new URLSearchParams(); if (state.inventory.productId) params.set('productId', state.inventory.productId); if (state.inventory.status) params.set('status', state.inventory.status);
     const result = await request(`/inventory${params.toString() ? `?${params}` : ''}`); if (!isCurrent(token)) return;
@@ -429,7 +472,7 @@ export async function mountAdminTools(root, options = {}) {
   }
   function navItems() {
     return [
-      ['Overview', '/admin', 'home'], ['Products', '/admin/products', 'box'], ['Uploads', '/admin/uploads', 'upload'], ['Orders', '/admin/orders', 'orders'], ['Checkout', '/admin/checkout', 'wallet'], ['Supplier', '/admin/supplier', 'refresh'], ['Audit logs', '/admin/audit-logs', 'audit'],
+      ['Overview', '/admin', 'home'], ['Products', '/admin/products', 'box'], ['Uploads', '/admin/uploads', 'upload'], ['Orders', '/admin/orders', 'orders'], ['Checkout', '/admin/checkout', 'wallet'], ['Notifications', '/admin/notifications', 'bell'], ['Supplier', '/admin/supplier', 'refresh'], ['Audit logs', '/admin/audit-logs', 'audit'],
     ];
   }
   function adminLink(path, label, glyph) { return `<a class="ej-admin-nav-link ${currentRoute === path ? 'active' : ''}" href="${path}" data-admin-link="${path}">${icon(glyph, 18)}<span>${label}</span></a>`; }
@@ -437,7 +480,7 @@ export async function mountAdminTools(root, options = {}) {
     const email = session?.email || '';
     return `<div class="ej-admin-shell"><aside class="ej-admin-sidebar" data-admin-sidebar><div class="ej-admin-brand"><a href="/" data-admin-link="/" aria-label="Emmyjosh Logs home">${logo('ej-admin-logo')}</a><button class="ej-admin-icon-button ej-admin-close-mobile" type="button" data-admin-action="menu" aria-label="Close menu">${icon('close', 19)}</button></div><div class="ej-admin-sidebar-kicker">ADMIN WORKSPACE</div><nav class="ej-admin-nav" aria-label="Admin navigation">${navItems().map(([label, path, glyph]) => adminLink(path, label, glyph)).join('')}</nav><div class="ej-admin-sidebar-foot"><a class="ej-admin-market-link" href="/marketplace" data-admin-link="/marketplace">${icon('external', 16)} <span>Customer marketplace</span></a><div class="ej-admin-legacy-note">Legacy admin sections remain preview-only.</div><button class="ej-admin-nav-link" type="button" data-admin-action="logout">${icon('logout', 18)}<span>Sign out</span></button></div></aside><div class="ej-admin-main"><header class="ej-admin-topbar"><button class="ej-admin-icon-button ej-admin-menu-button" type="button" data-admin-action="menu" aria-label="Open admin menu">${icon('menu', 20)}</button><div class="ej-admin-breadcrumb"><span>Workspace</span><b>/</b><strong>${escapeHTML(pageTitle(currentRoute))}</strong></div><div class="ej-admin-top-actions"><span class="ej-admin-session-pill">${icon('lock', 14)} Secure session</span><span class="ej-admin-avatar">${escapeHTML((email[0] || 'A').toUpperCase())}</span><span class="ej-admin-email">${escapeHTML(email)}</span><button class="button button-small ej-admin-top-logout" type="button" data-admin-action="logout">Sign out</button></div></header><main class="ej-admin-content">${content}</main></div></div><div class="ej-admin-toast-slot" data-admin-toast aria-live="polite"></div>`;
   }
-  function pageTitle(path) { return ({ '/admin': 'Overview', '/admin/products': 'Products', '/admin/pricing': 'Products', '/admin/inventory': 'Products', '/admin/uploads': 'Uploads', '/admin/orders': 'Orders', '/admin/checkout': 'Checkout', '/admin/supplier': 'Supplier', '/admin/audit-logs': 'Audit logs' })[path] || 'Admin'; }
+  function pageTitle(path) { return ({ '/admin': 'Overview', '/admin/products': 'Products', '/admin/pricing': 'Products', '/admin/inventory': 'Products', '/admin/uploads': 'Uploads', '/admin/orders': 'Orders', '/admin/checkout': 'Checkout', '/admin/notifications': 'Notifications', '/admin/supplier': 'Supplier', '/admin/audit-logs': 'Audit logs' })[path] || 'Admin'; }
   function authGate() {
     if (currentRoute === '/admin/login') return loginPage();
     if (!session) return shell(`<section class="ej-admin-empty ej-admin-gate"><div class="ej-admin-empty-icon">${icon('lock', 28)}</div><span class="ej-admin-eyebrow">ROLE-PROTECTED WORKSPACE</span><h1>Admin sign-in required</h1><p>No public or assumed admin access is available. Sign in with a server-confirmed admin account to continue.</p><a class="button" href="/admin/login" data-admin-link="/admin/login">Sign in securely ${icon('arrow', 16)}</a>${state.error ? `<div class="ej-admin-alert error" role="alert">${icon('warning', 17)}<span>${escapeHTML(state.error)}</span><button type="button" class="link-button" data-admin-action="retry-session">Retry</button></div>` : ''}</section>`);
@@ -504,7 +547,7 @@ export async function mountAdminTools(root, options = {}) {
       const isDon = product.source === 'DONMARKETPLACE';
       const apiPrice = product.acquisitionCost ? moneyLabel(product.acquisitionCost) : 'Unavailable';
       const sellingPrice = product.pricing?.retailMinor != null ? minorMoneyLabel(product.pricing.retailMinor) : 'Not set';
-      return `<tr><td><span class="ej-admin-table-product">${platformBadge(product.platform)}<span><b>${escapeHTML(product.name)}</b><small>${escapeHTML(product.id)}</small></span></span></td><td><span class="ej-admin-status ${statusClass(product.status)}">${escapeHTML(product.status || '—')}</span></td>${isDon ? `<td>${escapeHTML(apiPrice)}</td><td><b>${escapeHTML(sellingPrice)}</b></td><td><button class="button button-small button-outline" type="button" data-admin-action="open-don-product" data-id="${escapeHTML(product.id)}">${product.status === 'ACTIVE' ? 'View / Edit price' : 'Set price & activate'}</button></td>` : `<td>${escapeHTML(sellingPrice)}</td><td>${productCountMarkup(product)}</td><td><button class="button button-small button-outline" type="button" data-admin-action="edit-product" data-id="${escapeHTML(product.id)}">Edit</button></td>`}</tr>`;
+      return `<tr><td><span class="ej-admin-table-product">${platformBadge(product.platform)}<span><b>${escapeHTML(product.name)}</b><small>${escapeHTML(product.id)}</small></span></span></td><td><span class="ej-admin-status ${statusClass(product.status)}">${escapeHTML(product.status || '—')}</span></td>${isDon ? `<td>${escapeHTML(apiPrice)}</td><td><b>${escapeHTML(sellingPrice)}</b></td><td><button class="button button-small button-outline" type="button" data-admin-action="open-don-product" data-id="${escapeHTML(product.id)}">${product.status === 'ACTIVE' ? 'View / Edit price' : 'Set price & activate'}</button></td>` : `<td>${escapeHTML(sellingPrice)}</td><td>${productCountMarkup(product)}</td><td><div class="ej-notif-actions"><button class="button button-small button-outline" type="button" data-admin-action="edit-product" data-id="${escapeHTML(product.id)}">${icon('edit', 13)} Edit</button><button class="link-button ej-admin-danger-link" type="button" data-admin-action="delete-product" data-id="${escapeHTML(product.id)}">${icon('trash', 13)} Delete</button></div></td>`}</tr>`;
     }).join('');
   }
   function productsPage() {
@@ -553,7 +596,7 @@ export async function mountAdminTools(root, options = {}) {
   function productDrawer() {
     const product = state.editingProduct;
     const form = state.productForm;
-    return `<div class="ej-admin-drawer-backdrop" data-admin-action="close-drawer"><aside class="ej-admin-drawer" data-admin-drawer role="dialog" aria-modal="true" aria-labelledby="product-drawer-title"><div class="ej-admin-drawer-head"><div><span class="ej-admin-eyebrow">${product ? 'EDIT SOCIALLOG' : 'NEW SOCIALLOG'}</span><h2 id="product-drawer-title">${product ? 'Edit SocialLog' : 'Create SocialLog'}</h2></div><button class="ej-admin-icon-button" type="button" data-admin-action="close-drawer" aria-label="Close">${icon('close', 20)}</button></div><form class="ej-admin-form ej-admin-product-form" data-admin-form="product"><label>Name<input name="name" required maxlength="160" value="${escapeHTML(form.name)}"></label><div class="ej-admin-form-grid"><label>Platform<select name="platform">${optionList(PLATFORMS, form.platform)}</select></label><input type="hidden" name="source" value="OWN"><p class="ej-admin-field-help">Stored separately as your own SocialLog.</p></div><label>Description<textarea name="description" rows="3" maxlength="2000">${escapeHTML(form.description)}</textarea></label><label>Terms<textarea name="terms" rows="3" maxlength="4000">${escapeHTML(form.terms)}</textarea></label><div class="ej-admin-form-grid"><label>Your selling price (₦)<input name="sellingPrice" inputmode="decimal" required placeholder="Enter your price" value="${escapeHTML(form.sellingPrice)}"></label><label>Acquisition cost (₦)<input name="acquisitionCost" inputmode="decimal" placeholder="Optional" value="${escapeHTML(form.acquisitionCost)}"></label></div><label>Status<select name="status">${optionList(PRODUCT_STATUSES, form.status)}</select></label><div class="ej-admin-form-grid"><label>Minimum quantity<input name="minQty" type="number" min="1" max="100000" value="${escapeHTML(form.minQty)}"></label><label>Maximum quantity<input name="maxQty" type="number" min="1" max="100000" value="${escapeHTML(form.maxQty)}"></label></div><div class="ej-admin-drawer-actions"><button type="button" class="button button-outline" data-admin-action="close-drawer">Cancel</button><button type="submit" class="button" ${busy ? 'disabled' : ''}>${product ? 'Save changes' : 'Create SocialLog'} ${icon('check', 15)}</button>${product ? `<button type="button" class="link-button ej-admin-danger-link" data-admin-action="archive-product" data-id="${escapeHTML(product.id)}">Archive SocialLog</button>` : ''}</div></form></aside></div>`;
+    return `<div class="ej-admin-drawer-backdrop" data-admin-action="close-drawer"><aside class="ej-admin-drawer" data-admin-drawer role="dialog" aria-modal="true" aria-labelledby="product-drawer-title"><div class="ej-admin-drawer-head"><div><span class="ej-admin-eyebrow">${product ? 'EDIT SOCIALLOG' : 'NEW SOCIALLOG'}</span><h2 id="product-drawer-title">${product ? 'Edit SocialLog' : 'Create SocialLog'}</h2></div><button class="ej-admin-icon-button" type="button" data-admin-action="close-drawer" aria-label="Close">${icon('close', 20)}</button></div><form class="ej-admin-form ej-admin-product-form" data-admin-form="product"><label>Name<input name="name" required maxlength="160" value="${escapeHTML(form.name)}"></label><div class="ej-admin-form-grid"><label>Platform<select name="platform">${optionList(PLATFORMS, form.platform)}</select></label><input type="hidden" name="source" value="OWN"><p class="ej-admin-field-help">Stored separately as your own SocialLog.</p></div><label>Description<textarea name="description" rows="3" maxlength="2000">${escapeHTML(form.description)}</textarea></label><label>Terms<textarea name="terms" rows="3" maxlength="4000">${escapeHTML(form.terms)}</textarea></label><div class="ej-admin-form-grid"><label>Your selling price (₦)<input name="sellingPrice" inputmode="decimal" required placeholder="Enter your price" value="${escapeHTML(form.sellingPrice)}"></label><label>Acquisition cost (₦)<input name="acquisitionCost" inputmode="decimal" placeholder="Optional" value="${escapeHTML(form.acquisitionCost)}"></label></div><label>Status<select name="status">${optionList(PRODUCT_STATUSES, form.status)}</select></label><div class="ej-admin-form-grid"><label>Minimum quantity<input name="minQty" type="number" min="1" max="100000" value="${escapeHTML(form.minQty)}"></label><label>Maximum quantity<input name="maxQty" type="number" min="1" max="100000" value="${escapeHTML(form.maxQty)}"></label></div><div class="ej-admin-drawer-actions"><button type="button" class="button button-outline" data-admin-action="close-drawer">Cancel</button><button type="submit" class="button" ${busy ? 'disabled' : ''}>${product ? 'Save changes' : 'Create SocialLog'} ${icon('check', 15)}</button>${product ? `<button type="button" class="link-button ej-admin-danger-link" data-admin-action="archive-product" data-id="${escapeHTML(product.id)}">Archive SocialLog</button><button type="button" class="link-button ej-admin-danger-link" data-admin-action="delete-product" data-id="${escapeHTML(product.id)}">Delete permanently</button>` : ''}</div></form></aside></div>`;
   }
   function modeUnit(mode) { return mode === 'SAVED' ? 'not used: saved rule' : mode === 'PERCENT' ? 'percent' : 'Naira'; }
   function scopeKeyField(form) {
@@ -644,6 +687,54 @@ export async function mountAdminTools(root, options = {}) {
     return shell(`${header('ORDERS', 'Orders', 'Manage every log and virtual number order across the platform. Refunds credit the customer wallet for the full original amount; they are not bank refunds.', `<button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 14)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}<section class="ej-admin-metrics ej-ord-stats">${metric('Total orders', String(all.length), 'All time', 'orders', 'orange')}${metric('Active', String(active), 'Waiting or processing', 'refresh', 'brown')}${metric('Completed', String(completed), 'Delivered to customers', 'check', 'green')}${metric('Refunded', String(refunded), 'Credited back to wallets', 'refresh', 'yellow')}${metric('Revenue', revenueLabel, 'Completed, not refunded', 'chart', 'green')}</section><div class="ej-admin-filter-bar ej-ord-filters"><label class="ej-admin-search">${icon('search', 16)}<input data-admin-field="orders-query" type="search" value="${escapeHTML(state.orderQuery)}" placeholder="Search by order, product, country, customer or provider"></label><label>Status<select data-admin-field="orders-status">${ORDER_STATUS_OPTIONS.map(([value, label]) => `<option value="${value}" ${state.orderStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Type<select data-admin-field="orders-type">${[['ALL', 'All types'], ['LOG', 'Logs'], ['NUMBER', 'Virtual numbers']].map(([value, label]) => `<option value="${value}" ${state.orderType === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><section class="ej-admin-panel ej-admin-table-panel">${state.loading ? loadingBox() : rows.length ? table : emptyState(all.length ? 'No orders match your filters' : 'No orders yet', all.length ? 'Try a different search, status or type.' : 'Orders will appear here once customers check out.', 'orders')}</section>`);
   }
 
+  // Notifications: announcements shown to every customer, with an optional link button (WhatsApp, Telegram, any link).
+  function notifLinkChip(item) {
+    if (!item.linkUrl) return '<span class="ej-admin-muted">No link</span>';
+    const kind = String(item.linkKind || clientLinkKind(item.linkUrl));
+    return `<a class="ej-nl ej-nl-${kind.toLowerCase()}" href="${escapeHTML(item.linkUrl)}" target="_blank" rel="noopener noreferrer">${icon(NOTIF_ICON[kind] || 'link', 13)} ${escapeHTML(item.linkLabel || NOTIF_LABELS[kind])}</a>`;
+  }
+  function notifPreviewMarkup(values) {
+    const title = String(values.title || '').trim() || 'Notification title';
+    const message = String(values.message || '').trim() || 'Your message will appear here.';
+    const url = String(values.linkUrl || '').trim();
+    let button = '';
+    if (/^https?:\/\//i.test(url)) {
+      const kind = clientLinkKind(url);
+      const label = String(values.linkLabel || '').trim() || NOTIF_LABELS[kind];
+      button = `<span class="ej-nl ej-nl-${kind.toLowerCase()}">${icon(NOTIF_ICON[kind], 13)} ${escapeHTML(label)}</span>`;
+    }
+    return `<div class="ej-notif-preview-card"><span class="ej-notif-preview-icon">${icon('bell', 18)}</span><div><b>${escapeHTML(title)}</b><p>${escapeHTML(message)}</p>${button}</div></div>`;
+  }
+  function notificationDrawer() {
+    const form = state.notificationForm;
+    const editing = state.editingNotification;
+    return `<div class="ej-admin-drawer-backdrop" data-admin-action="close-drawer"><aside class="ej-admin-drawer" data-admin-drawer role="dialog" aria-modal="true" aria-labelledby="notif-title"><div class="ej-admin-drawer-head"><div><span class="ej-admin-eyebrow">${editing ? 'EDIT NOTIFICATION' : 'NEW NOTIFICATION'}</span><h2 id="notif-title">${editing ? 'Edit notification' : 'Create a notification'}</h2></div><button class="ej-admin-icon-button" type="button" data-admin-action="close-drawer" aria-label="Close">${icon('close', 20)}</button></div><form class="ej-admin-form" data-admin-form="notification"><label>Title<input name="title" required maxlength="160" placeholder="e.g. Join our WhatsApp channel" value="${escapeHTML(form.title)}"></label><label>Message<textarea name="message" required rows="4" maxlength="2000" placeholder="What should customers know?">${escapeHTML(form.message)}</textarea></label><div class="ej-notif-link-box"><span class="ej-format-label">Link button <small>(optional)</small></span><div class="ej-notif-presets"><button type="button" class="ej-notif-preset" data-notif-preset="WHATSAPP">${icon('whatsapp', 14)} WhatsApp</button><button type="button" class="ej-notif-preset" data-notif-preset="TELEGRAM">${icon('telegram', 14)} Telegram</button><button type="button" class="ej-notif-preset" data-notif-preset="LINK">${icon('link', 14)} Other link</button></div><label>Link address<input name="linkUrl" type="url" inputmode="url" placeholder="https://wa.me/2348012345678 or https://t.me/yourchannel" value="${escapeHTML(form.linkUrl)}"></label><label>Button text <span class="ej-admin-optional">leave empty for the default</span><input name="linkLabel" maxlength="60" placeholder="Chat on WhatsApp" value="${escapeHTML(form.linkLabel)}"></label></div><div class="ej-notif-preview"><span class="ej-admin-eyebrow">WHAT CUSTOMERS WILL SEE</span><div data-notif-preview>${notifPreviewMarkup(form)}</div></div><div class="ej-admin-drawer-actions"><button type="button" class="button button-outline" data-admin-action="close-drawer">Cancel</button><button type="submit" class="button" ${busy ? 'disabled' : ''}>${editing ? 'Save changes' : 'Post notification'} ${icon('check', 15)}</button></div></form></aside></div>`;
+  }
+  function notificationsPage() {
+    const items = state.notifications;
+    const active = items.filter((item) => item.active).length;
+    const table = `<div class="ej-admin-table-wrap"><table class="ej-admin-table ej-notif-table"><thead><tr><th>Notification</th><th>Link button</th><th>Status</th><th>Seen by</th><th>Posted</th><th>Actions</th></tr></thead><tbody>${items.map((item) => `<tr><td class="ej-notif-title"><b>${escapeHTML(item.title)}</b><small>${escapeHTML(item.message)}</small></td><td>${notifLinkChip(item)}</td><td><span class="ej-admin-status ${item.active ? 'active' : 'archived'}">${item.active ? 'Live' : 'Hidden'}</span></td><td>${escapeHTML(String(item.readCount))} customer${item.readCount === 1 ? '' : 's'}</td><td>${dateLabel(item.createdAt)}</td><td><div class="ej-notif-actions"><button class="button button-small button-outline" type="button" data-admin-action="edit-notification" data-id="${escapeHTML(item.id)}">${icon('edit', 13)} Edit</button><button class="button button-small button-outline" type="button" data-admin-action="toggle-notification" data-id="${escapeHTML(item.id)}">${item.active ? 'Hide' : 'Show'}</button><button class="link-button ej-admin-danger-link" type="button" data-admin-action="delete-notification" data-id="${escapeHTML(item.id)}">${icon('trash', 13)} Delete</button></div></td></tr>`).join('')}</tbody></table></div>`;
+    return shell(`${header('CUSTOMER UPDATES', 'Notifications', 'Post an announcement that every customer sees in their Notifications page. Add a link button to send them to WhatsApp, Telegram or any web page.', `<button class="button button-small" type="button" data-admin-action="new-notification">${icon('plus', 15)} New notification</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}<section class="ej-admin-panel ej-admin-table-panel"><div class="ej-admin-panel-head"><div><span class="ej-admin-eyebrow">ANNOUNCEMENTS</span><h2>${items.length} notification${items.length === 1 ? '' : 's'} · ${active} live</h2></div><button class="button button-small button-outline" type="button" data-admin-action="refresh-page">${icon('refresh', 14)} Refresh</button></div>${state.loading ? loadingBox() : items.length ? table : emptyState('No notifications yet', 'Create your first announcement. Customers see it right away in their Notifications page.', 'bell')}</section>${state.drawer === 'notification' ? notificationDrawer() : ''}`);
+  }
+  async function saveNotification(form) {
+    if (busy) return;
+    syncForm(form, state.notificationForm);
+    const values = state.notificationForm;
+    const link = values.linkUrl.trim();
+    if (!values.title.trim() || !values.message.trim()) { state.pageError = 'A title and a message are required.'; render(); return; }
+    if (link && !/^https?:\/\//i.test(link)) { state.pageError = 'The link must start with https:// (for example https://wa.me/234...).'; render(); return; }
+    busy = true; state.pageError = ''; render();
+    try {
+      const payload = { title: values.title.trim(), message: values.message.trim(), linkUrl: link, linkLabel: values.linkLabel.trim() };
+      const editing = state.editingNotification;
+      await request(editing ? `/notifications/${encodeURIComponent(editing.id)}` : '/notifications', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
+      state.drawer = null; state.editingNotification = null; state.notificationForm = emptyNotification();
+      await loadNotifications(revision);
+      toast(editing ? 'Notification updated.' : 'Notification posted. Customers can see it now.', 'success');
+    } catch (error) { state.pageError = controlledError(error, 'The notification was not saved. Your text is still here.'); }
+    finally { busy = false; render(); }
+  }
+
   // Reads the real shape returned by GET /providers/status:
   //   { don: { enabled, configured, mode, modeValid, deliveryContractConfirmed, purchasesEnabled },
   //     providers: [{ provider, providerLabel, enabled, configured, quotesEnabled, purchasesEnabled, currency }] }
@@ -721,6 +812,7 @@ export async function mountAdminTools(root, options = {}) {
     if (currentRoute === '/admin/uploads') return uploadsPage();
     if (currentRoute === '/admin/orders') return ordersPage();
     if (currentRoute === '/admin/checkout') return ordersPage();
+    if (currentRoute === '/admin/notifications') return notificationsPage();
     if (currentRoute === '/admin/supplier') return supplierPage();
     if (currentRoute === '/admin/audit-logs') return auditPage();
     return overviewPage();
@@ -948,6 +1040,25 @@ export async function mountAdminTools(root, options = {}) {
       if (action === 'edit-product') { const product = state.products.find((item) => String(item.id) === String(control.dataset.id)); if (product) { state.drawer = 'product'; state.editingProduct = product; state.productForm = emptyProduct(product); render(); } return; }
       if (action === 'close-drawer') { if (event.target.closest('[data-admin-drawer]') && event.target !== control) return; state.drawer = null; render(); return; }
       if (action === 'archive-product') { await goWithConfirm('Archive this product? It will no longer be available for new active catalog use.', async () => { if (busy) return; busy = true; render(); try { await request(`/products/${encodeURIComponent(control.dataset.id)}`, { method: 'PATCH', body: JSON.stringify({ status: 'ARCHIVED' }) }); state.drawer = null; state.editingProduct = null; await loadProducts(revision); toast('Product archived.', 'success'); } catch (error) { state.pageError = controlledError(error, 'Product was not archived.'); } finally { busy = false; render(); } }); return; }
+      if (action === 'delete-product') {
+        if (busy) return;
+        const product = state.products.find((item) => String(item.id) === String(control.dataset.id));
+        const counts = product?.counts || {};
+        const unsold = Number(counts.AVAILABLE || 0) + Number(counts.QUARANTINED || 0);
+        const detail = unsold ? ` Its ${unsold} unsold unit${unsold === 1 ? '' : 's'} will be deleted too.` : '';
+        if (!(await confirmDialog(`Delete "${product?.name || 'this log'}" permanently?${detail} This cannot be undone. Logs that have already been sold are kept for your order history, so archive those instead.`, { title: 'Delete log', confirmLabel: 'Delete permanently', tone: 'danger' }))) return;
+        busy = true; render();
+        try {
+          await request(`/products/${encodeURIComponent(control.dataset.id)}`, { method: 'DELETE' });
+          state.drawer = null; state.editingProduct = null;
+          await loadProducts(revision);
+          state.pageError = '';
+          toast('Log deleted.', 'success');
+        } catch (error) {
+          state.pageError = safeBackendMessage(error?.backendMessage) || controlledError(error, 'The log could not be deleted.');
+        } finally { busy = false; render(); }
+        return;
+      }
       if (action === 'new-rule') { state.drawer = 'rule'; state.pricingForm = emptyRule(); render(); return; }
       if (action === 'edit-rule') { const rule = state.rules.find((item) => String(item.id) === String(control.dataset.id)); if (rule) { state.drawer = 'rule'; state.pricingForm = emptyRule(rule); render(); } return; }
       if (action === 'delete-rule') { await goWithConfirm('Delete this pricing rule? The server will record the deletion.', async () => { if (busy) return; busy = true; render(); try { await request(`/pricing-rules/${encodeURIComponent(control.dataset.id)}`, { method: 'DELETE' }); await loadPricing(); toast('Pricing rule deleted.', 'success'); } catch (error) { state.pageError = controlledError(error, 'Pricing rule was not deleted.'); } finally { busy = false; render(); } }); return; }
@@ -977,8 +1088,47 @@ export async function mountAdminTools(root, options = {}) {
         finally { busy = false; render(); }
         return;
       }
+      if (action === 'new-notification') { state.drawer = 'notification'; state.editingNotification = null; state.notificationForm = emptyNotification(); render(); return; }
+      if (action === 'edit-notification') { const item = state.notifications.find((entry) => String(entry.id) === String(control.dataset.id)); if (item) { state.drawer = 'notification'; state.editingNotification = item; state.notificationForm = emptyNotification(item); render(); } return; }
+      if (action === 'toggle-notification') {
+        const item = state.notifications.find((entry) => String(entry.id) === String(control.dataset.id));
+        if (!item || busy) return;
+        busy = true; render();
+        try { await request(`/notifications/${encodeURIComponent(item.id)}`, { method: 'PATCH', body: JSON.stringify({ active: !item.active }) }); await loadNotifications(revision); toast(item.active ? 'Notification hidden from customers.' : 'Notification is live again.', 'success'); }
+        catch (error) { state.pageError = controlledError(error, 'The notification could not be updated.'); }
+        finally { busy = false; render(); }
+        return;
+      }
+      if (action === 'delete-notification') {
+        if (busy) return;
+        if (!(await confirmDialog('Customers will no longer see this notification. This cannot be undone.', { title: 'Delete notification', confirmLabel: 'Delete', tone: 'danger' }))) return;
+        busy = true; render();
+        try { await request(`/notifications/${encodeURIComponent(control.dataset.id)}`, { method: 'DELETE' }); await loadNotifications(revision); toast('Notification deleted.', 'success'); }
+        catch (error) { state.pageError = controlledError(error, 'The notification could not be deleted.'); }
+        finally { busy = false; render(); }
+        return;
+      }
       if (action === 'logout') { await logout(); return; }
     }));
+    root.querySelectorAll('[data-admin-form="notification"]').forEach((form) => {
+      const refresh = () => {
+        syncForm(form, state.notificationForm);
+        const box = form.querySelector('[data-notif-preview]');
+        if (box) box.innerHTML = notifPreviewMarkup(state.notificationForm);
+      };
+      form.addEventListener('input', refresh);
+      form.addEventListener('change', refresh);
+      form.addEventListener('submit', (event) => { event.preventDefault(); void saveNotification(form); });
+      form.querySelectorAll('[data-notif-preset]').forEach((button) => button.addEventListener('click', () => {
+        const kind = button.dataset.notifPreset;
+        const starters = { WHATSAPP: 'https://wa.me/', TELEGRAM: 'https://t.me/', LINK: 'https://' };
+        const url = form.elements.linkUrl;
+        if (!url.value.trim() || Object.values(starters).includes(url.value.trim())) url.value = starters[kind];
+        form.elements.linkLabel.placeholder = NOTIF_LABELS[kind];
+        url.focus();
+        refresh();
+      }));
+    });
     root.querySelectorAll('[data-admin-form="login"]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault(); void login(form); }));
     root.querySelectorAll('[data-admin-form="don-price"]').forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();

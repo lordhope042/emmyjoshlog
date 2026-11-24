@@ -107,6 +107,9 @@ const svgPaths = {
   logout: '<path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/>',
   megaphone: '<path d="m3 11 18-5v12L3 14z"/><path d="M11 16l2 6H8l-2-7M21 11a2 2 0 0 1 0 4"/>',
   filter: '<path d="M4 6h16M7 12h10m-7 6h4"/>',
+  whatsapp: '<path d="M20 12a8 8 0 0 1-11.7 7.1L4 20l1-4.2A8 8 0 1 1 20 12Z"/><path d="M9 9.5c.5 2.5 2.5 4.5 5.5 5.5l1-1.5-2-1-1 .8c-.8-.4-1.5-1.1-1.9-1.9l.8-1-1-2L9 9.5Z"/>',
+  telegram: '<path d="M21 4 3 11l6 2 2 6 3-4.5 5 3.5L21 4Z"/><path d="m9 13 12-9"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
 };
 
 function icon(name, size = 20, extraClass = '') {
@@ -923,10 +926,22 @@ function mapTransactions(rows) {
   });
 }
 
+// Only plain web links may become buttons; anything else (javascript:, data:, …) is dropped.
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return ['https:', 'http:'].includes(url.protocol) ? url.toString() : '';
+  } catch { return ''; }
+}
+
 function mapNotifications(rows) {
   return rows.map((item) => {
     const type = String(item.type || '').toLowerCase();
+    const linkUrl = safeExternalUrl(item.linkUrl);
     return {
+      linkUrl,
+      linkLabel: linkUrl ? String(item.linkLabel || 'Open link') : '',
+      linkKind: linkUrl ? String(item.linkKind || 'LINK').toUpperCase() : '',
       id: item.id || item.notificationId || '',
       title: item.title || 'Account update',
       body: item.body || item.message || 'Open your account for more information.',
@@ -981,10 +996,26 @@ function profilePage() {
     </div></div>`);
 }
 
+const NOTIF_CSS = `
+.notif-link-btn{display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:10px 18px;border-radius:999px;background:#e8650a;color:#fff!important;font-weight:700;font-size:.875rem;text-decoration:none;box-shadow:0 10px 22px -12px rgba(0,0,0,.45);transition:transform .2s ease,filter .2s ease}
+.notif-link-btn:hover{transform:translateY(-2px);filter:brightness(1.05)}
+.notif-link-btn:focus-visible{outline:3px solid #e8650a;outline-offset:3px}
+.notif-link-whatsapp{background:#25d366}
+.notif-link-telegram{background:#229ed9}
+`;
+function ensureNotifStyles() {
+  if (document.getElementById('notif-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'notif-styles';
+  style.textContent = NOTIF_CSS;
+  document.head.appendChild(style);
+}
+
 function notificationsPage() {
+  ensureNotifStyles();
   const notices = state.notifications !== null ? mapNotifications(state.notifications) : (getApiBase() ? [] : sampleNotifications);
   return accountShell('notifications', `${pageHeading('ACCOUNT UPDATES', 'Notifications', 'Stay up to date with orders, wallet activity, and support.')}
-    <section class="panel"><div class="panel-head"><div><span class="eyebrow">YOUR ACTIVITY</span><h2>Notifications</h2></div><button class="link-button" data-action="mark-all">Mark all as read</button></div><div class="notification-list">${notices.map((item) => `<article class="notification-item ${item.read ? 'read' : 'unread'}"><span class="notification-icon ${item.tone}">${icon(item.icon, 20)}</span><div class="notification-copy"><b>${escapeHTML(item.title)}</b><p>${escapeHTML(item.body)}</p><small>${escapeHTML(item.time)} · ${item.read ? 'Read' : 'Unread'}</small></div><button class="link-button" data-action="mark-one" data-id="${escapeHTML(item.id)}">${item.read ? 'Read' : 'Mark read'}</button></article>`).join('') || `<div class="empty-state"><span>${icon('bell', 24)}</span><b>No notifications</b><p>There are no customer updates to show.</p></div>`}</div>${getApiBase() ? '' : `<div class="preview-footnote">${icon('eye', 15)} Example notifications only.</div>`}</section>`);
+    <section class="panel"><div class="panel-head"><div><span class="eyebrow">YOUR ACTIVITY</span><h2>Notifications</h2></div><button class="link-button" data-action="mark-all">Mark all as read</button></div><div class="notification-list">${notices.map((item) => `<article class="notification-item ${item.read ? 'read' : 'unread'}"><span class="notification-icon ${item.tone}">${icon(item.icon, 20)}</span><div class="notification-copy"><b>${escapeHTML(item.title)}</b><p>${escapeHTML(item.body)}</p>${item.linkUrl ? `<a class="notif-link-btn notif-link-${escapeHTML(item.linkKind.toLowerCase())}" href="${escapeHTML(item.linkUrl)}" target="_blank" rel="noopener noreferrer" data-notif-link="${escapeHTML(item.id)}">${icon(item.linkKind === 'WHATSAPP' ? 'whatsapp' : item.linkKind === 'TELEGRAM' ? 'telegram' : 'link', 16)} ${escapeHTML(item.linkLabel)}</a>` : ''}<small>${escapeHTML(item.time)} · ${item.read ? 'Read' : 'Unread'}</small></div><button class="link-button" data-action="mark-one" data-id="${escapeHTML(item.id)}">${item.read ? 'Read' : 'Mark read'}</button></article>`).join('') || `<div class="empty-state"><span>${icon('bell', 24)}</span><b>No notifications</b><p>There are no customer updates to show.</p></div>`}</div>${getApiBase() ? '' : `<div class="preview-footnote">${icon('eye', 15)} Example notifications only.</div>`}</section>`);
 }
 
 function supportPage() {
@@ -1070,7 +1101,7 @@ function render() {
   }
   const query = new URLSearchParams(window.location.search);
   document.title = route === '/' ? 'Emmyjosh Logs Marketplace' : `${route.split('/').filter(Boolean).at(-1)?.replaceAll('-', ' ') || 'Marketplace'} · Emmyjosh Logs`;
-  const managedAdminRoutes = ['/admin', '/admin/login', '/admin/products', '/admin/pricing', '/admin/inventory', '/admin/uploads', '/admin/orders', '/admin/checkout', '/admin/supplier', '/admin/audit-logs'];
+  const managedAdminRoutes = ['/admin', '/admin/login', '/admin/products', '/admin/pricing', '/admin/inventory', '/admin/uploads', '/admin/orders', '/admin/checkout', '/admin/notifications', '/admin/supplier', '/admin/audit-logs'];
   if (route.startsWith('/admin/') && !managedAdminRoutes.includes(route)) {
     history.replaceState({}, '', '/admin/login');
     return render();
@@ -1888,6 +1919,15 @@ function bindEvents() {
     state.numberError = '';
     state.loaded.numbers = true;
     void loadNumbersCatalog();
+  }));
+
+  // Opening a notification's link button also marks it as read (the page is not redrawn, so the link opens normally).
+  app.querySelectorAll('[data-notif-link]').forEach((link) => link.addEventListener('click', () => {
+    const id = link.dataset.notifLink;
+    const item = (state.notifications || []).find((entry) => String(entry.id) === String(id));
+    if (!item || item.read || item.isRead || item.readAt || !getApiBase() || !state.user) return;
+    item.read = true; item.isRead = true; item.readAt = new Date().toISOString();
+    void api.markNotificationRead(id).catch(() => {});
   }));
 }
 
