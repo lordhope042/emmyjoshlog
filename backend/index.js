@@ -250,7 +250,10 @@ function productInput(body, existing = {}) {
     fail(400, 'invalid_request', 'Quantity bounds are invalid');
   }
 
-  const sellingPrice = body.sellingPrice !== undefined ? body.sellingPrice : null;
+  // A partial update (e.g. archiving: { status: 'ARCHIVED' }) keeps the existing selling price.
+  const sellingPrice = body.sellingPrice !== undefined
+    ? body.sellingPrice
+    : (existing.selling_price_minor == null ? null : minorToDecimal(existing.selling_price_minor));
   let sellingPriceMinor = null;
 
   if (source === 'OWN') {
@@ -2306,6 +2309,52 @@ function createAdminRouter(options = {}) {
         expiresAt: asDate(item.expires_at),
       })),
     });
+  }));
+
+  // Sold logs: every SOLD unit of your own logs with the order it went out on. Credentials are never returned.
+  router.get('/sold-logs', auth, use(async (req, res) => {
+    const conditions = ["u.status = 'SOLD'"];
+    const params = [];
+    if (req.query.productId) { conditions.push('u.product_id = ?'); params.push(String(req.query.productId)); }
+
+    const sold = await rows(
+      db(),
+      `SELECT u.id, u.product_id, p.name AS product_name, p.platform, u.source_ref, u.created_at,
+              a.order_id, o.user_id, o.state AS order_state, o.quantity, o.retail_minor, o.created_at AS sold_at
+       FROM ej_own_inventory_units u
+       JOIN ej_own_products p ON p.id = u.product_id
+       LEFT JOIN ej_checkout_allocations a ON a.admin_unit_id = u.id
+       LEFT JOIN ej_checkout_orders o ON o.order_id = a.order_id
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY COALESCE(o.created_at, u.created_at) DESC
+       LIMIT 1000`,
+      params,
+    );
+
+    const logs = sold.map((row) => {
+      const qty = Number(row.quantity || 0);
+      const unitMinor = row.retail_minor != null && qty > 0 ? BigInt(row.retail_minor) / BigInt(qty) : null;
+      return {
+        id: row.id,
+        productId: row.product_id,
+        productName: row.product_name,
+        platform: row.platform,
+        sourceRef: row.source_ref || null,
+        orderId: row.order_id || null,
+        buyerId: row.user_id || null,
+        orderState: row.order_state || null,
+        price: unitMinor == null ? null : minorToDecimal(unitMinor),
+        soldAt: row.sold_at ? asDate(row.sold_at) : null,
+        createdAt: asDate(row.created_at),
+      };
+    });
+
+    const totalMinor = sold.reduce((sum, row) => {
+      const qty = Number(row.quantity || 0);
+      return row.retail_minor != null && qty > 0 ? sum + BigInt(row.retail_minor) / BigInt(qty) : sum;
+    }, 0n);
+
+    res.json({ logs, count: logs.length, totalRevenue: minorToDecimal(totalMinor) });
   }));
 
   router.get('/inventory', auth, use(async (req, res) => {

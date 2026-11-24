@@ -320,7 +320,7 @@ export async function mountAdminTools(root, options = {}) {
   let lastAnimKey = '';
   let hiddenAt = 0;
   const state = {
-    summary: null, products: [], rules: [], imports: [], units: [], audits: [], supplier: null, checkoutOrders: [], recentOrders: [], recentAudits: [], orderFilter: 'All', orderQuery: '', orderStatus: 'ALL', orderType: 'ALL', supplierStatus: null, productTab: DON_LOGS_ENABLED ? 'DONMARKETPLACE' : 'OWN', selectedDonProduct: null, notifications: [], notificationForm: emptyNotification(), editingNotification: null,
+    summary: null, products: [], rules: [], imports: [], units: [], soldLogs: [], soldTotal: '0', soldQuery: '', audits: [], supplier: null, checkoutOrders: [], recentOrders: [], recentAudits: [], orderFilter: 'All', orderQuery: '', orderStatus: 'ALL', orderType: 'ALL', supplierStatus: null, productTab: DON_LOGS_ENABLED ? 'DONMARKETPLACE' : 'OWN', selectedDonProduct: null, notifications: [], notificationForm: emptyNotification(), editingNotification: null,
     error: '', pageError: '', loading: false, drawer: null, editingProduct: null,
     productForm: emptyProduct(), socialStep: 1, socialGroup: '', pricingForm: emptyRule(), calculator: { cost: '', platform: '', productId: '', mode: 'FIXED', value: '', result: null, error: '' },
     inventory: { productId: '', status: '', query: '' }, upload: emptyUpload(), uploadResult: null,
@@ -444,6 +444,9 @@ export async function mountAdminTools(root, options = {}) {
         if (!isCurrent(token)) return; state.imports = Array.isArray(result.imports) ? result.imports : [];
       } else if (path === '/admin/orders' || path === '/admin/checkout') {
         const result = await request('/commerce/orders'); if (!isCurrent(token)) return; state.checkoutOrders = Array.isArray(result.orders) ? result.orders : [];
+      } else if (path === '/admin/sold-logs') {
+        const result = await request('/sold-logs'); if (!isCurrent(token)) return;
+        state.soldLogs = Array.isArray(result.logs) ? result.logs : []; state.soldTotal = result.totalRevenue || '0';
       } else if (path === '/admin/notifications') {
         const result = await request('/notifications'); if (!isCurrent(token)) return; state.notifications = Array.isArray(result.notifications) ? result.notifications : [];
       } else if (path === '/admin/supplier') {
@@ -472,7 +475,7 @@ export async function mountAdminTools(root, options = {}) {
   }
   function navItems() {
     return [
-      ['Overview', '/admin', 'home'], ['Products', '/admin/products', 'box'], ['Uploads', '/admin/uploads', 'upload'], ['Orders', '/admin/orders', 'orders'], ['Checkout', '/admin/checkout', 'wallet'], ['Notifications', '/admin/notifications', 'bell'], ['Supplier', '/admin/supplier', 'refresh'], ['Audit logs', '/admin/audit-logs', 'audit'],
+      ['Overview', '/admin', 'home'], ['Products', '/admin/products', 'box'], ['Uploads', '/admin/uploads', 'upload'], ['Orders', '/admin/orders', 'orders'], ['Sold logs', '/admin/sold-logs', 'check'], ['Checkout', '/admin/checkout', 'wallet'], ['Notifications', '/admin/notifications', 'bell'], ['Supplier', '/admin/supplier', 'refresh'], ['Audit logs', '/admin/audit-logs', 'audit'],
     ];
   }
   function adminLink(path, label, glyph) { return `<a class="ej-admin-nav-link ${currentRoute === path ? 'active' : ''}" href="${path}" data-admin-link="${path}">${icon(glyph, 18)}<span>${label}</span></a>`; }
@@ -480,7 +483,7 @@ export async function mountAdminTools(root, options = {}) {
     const email = session?.email || '';
     return `<div class="ej-admin-shell"><aside class="ej-admin-sidebar" data-admin-sidebar><div class="ej-admin-brand"><a href="/" data-admin-link="/" aria-label="Emmyjosh Logs home">${logo('ej-admin-logo')}</a><button class="ej-admin-icon-button ej-admin-close-mobile" type="button" data-admin-action="menu" aria-label="Close menu">${icon('close', 19)}</button></div><div class="ej-admin-sidebar-kicker">ADMIN WORKSPACE</div><nav class="ej-admin-nav" aria-label="Admin navigation">${navItems().map(([label, path, glyph]) => adminLink(path, label, glyph)).join('')}</nav><div class="ej-admin-sidebar-foot"><a class="ej-admin-market-link" href="/marketplace" data-admin-link="/marketplace">${icon('external', 16)} <span>Customer marketplace</span></a><div class="ej-admin-legacy-note">Legacy admin sections remain preview-only.</div><button class="ej-admin-nav-link" type="button" data-admin-action="logout">${icon('logout', 18)}<span>Sign out</span></button></div></aside><div class="ej-admin-main"><header class="ej-admin-topbar"><button class="ej-admin-icon-button ej-admin-menu-button" type="button" data-admin-action="menu" aria-label="Open admin menu">${icon('menu', 20)}</button><div class="ej-admin-breadcrumb"><span>Workspace</span><b>/</b><strong>${escapeHTML(pageTitle(currentRoute))}</strong></div><div class="ej-admin-top-actions"><span class="ej-admin-session-pill">${icon('lock', 14)} Secure session</span><span class="ej-admin-avatar">${escapeHTML((email[0] || 'A').toUpperCase())}</span><span class="ej-admin-email">${escapeHTML(email)}</span><button class="button button-small ej-admin-top-logout" type="button" data-admin-action="logout">Sign out</button></div></header><main class="ej-admin-content">${content}</main></div></div><div class="ej-admin-toast-slot" data-admin-toast aria-live="polite"></div>`;
   }
-  function pageTitle(path) { return ({ '/admin': 'Overview', '/admin/products': 'Products', '/admin/pricing': 'Products', '/admin/inventory': 'Products', '/admin/uploads': 'Uploads', '/admin/orders': 'Orders', '/admin/checkout': 'Checkout', '/admin/notifications': 'Notifications', '/admin/supplier': 'Supplier', '/admin/audit-logs': 'Audit logs' })[path] || 'Admin'; }
+  function pageTitle(path) { return ({ '/admin': 'Overview', '/admin/products': 'Products', '/admin/pricing': 'Products', '/admin/inventory': 'Products', '/admin/uploads': 'Uploads', '/admin/orders': 'Orders', '/admin/sold-logs': 'Sold logs', '/admin/checkout': 'Checkout', '/admin/notifications': 'Notifications', '/admin/supplier': 'Supplier', '/admin/audit-logs': 'Audit logs' })[path] || 'Admin'; }
   function authGate() {
     if (currentRoute === '/admin/login') return loginPage();
     if (!session) return shell(`<section class="ej-admin-empty ej-admin-gate"><div class="ej-admin-empty-icon">${icon('lock', 28)}</div><span class="ej-admin-eyebrow">ROLE-PROTECTED WORKSPACE</span><h1>Admin sign-in required</h1><p>No public or assumed admin access is available. Sign in with a server-confirmed admin account to continue.</p><a class="button" href="/admin/login" data-admin-link="/admin/login">Sign in securely ${icon('arrow', 16)}</a>${state.error ? `<div class="ej-admin-alert error" role="alert">${icon('warning', 17)}<span>${escapeHTML(state.error)}</span><button type="button" class="link-button" data-admin-action="retry-session">Retry</button></div>` : ''}</section>`);
@@ -616,6 +619,12 @@ export async function mountAdminTools(root, options = {}) {
   function inventoryPage() {
     const visible = state.inventory.query ? state.units.filter((unit) => `${unit.productName} ${unit.platform} ${unit.id} ${unit.sourceRef || ''}`.toLowerCase().includes(state.inventory.query.toLowerCase())) : state.units;
     return shell(`${header('STOCK CONTROL', 'Inventory', 'All inventory states are visible. Only AVAILABLE and QUARANTINED units can be changed; RESERVED and SOLD units are read-only.', `<button class="button button-small" type="button" data-admin-action="refresh-page">${icon('refresh', 15)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}<section class="ej-admin-panel"><div class="ej-admin-filter-bar"><label class="ej-admin-search">${icon('search', 16)}<input data-admin-field="inventory-query" type="search" value="${escapeHTML(state.inventory.query)}" placeholder="Search safe IDs or source refs"></label><label>Product<select data-admin-field="inventory-product"><option value="">All products</option>${state.products.map((p) => `<option value="${escapeHTML(p.id)}" ${p.id === state.inventory.productId ? 'selected' : ''}>${escapeHTML(p.name)}</option>`).join('')}</select></label><label>Status<select data-admin-field="inventory-status"><option value="">All statuses</option>${optionList(INVENTORY_STATUSES, state.inventory.status)}</select></label></div>${state.unitsError ? alertBox(state.unitsError, 'error', true) : ''}${state.loading ? loadingBox() : visible.length ? `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Unit</th><th>Product</th><th>Platform</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>${visible.map((unit) => `<tr><td><code>${escapeHTML(unit.id)}</code></td><td>${escapeHTML(unit.productName)}</td><td>${platformBadge(unit.platform)}</td><td><span class="ej-admin-status ${statusClass(unit.status)}">${escapeHTML(unit.status)}</span></td><td>${dateLabel(unit.createdAt)}</td><td>${unit.status === 'AVAILABLE' || unit.status === 'QUARANTINED' ? `<button type="button" class="button button-small button-outline" data-admin-action="toggle-unit" data-id="${escapeHTML(unit.id)}" data-status="${escapeHTML(unit.status)}">${unit.status === 'AVAILABLE' ? 'Quarantine' : 'Restock'}</button>` : '—'}</td></tr>`).join('')}</tbody></table></div>` : emptyState('No matching inventory', 'Only safe metadata is returned; encrypted credential payloads are never shown.', 'warehouse')}</section>`);
+  }
+  function soldLogsPage() {
+    const q = state.soldQuery.toLowerCase();
+    const visible = q ? state.soldLogs.filter((l) => `${l.productName} ${l.platform} ${l.id} ${l.orderId || ''} ${l.buyerId || ''} ${l.sourceRef || ''}`.toLowerCase().includes(q)) : state.soldLogs;
+    const rowsHtml = visible.map((l) => `<tr><td><code>${escapeHTML(l.id)}</code></td><td>${escapeHTML(l.productName)}</td><td>${platformBadge(l.platform)}</td><td>${l.orderId ? `<code>${escapeHTML(l.orderId)}</code>` : '—'}</td><td>${l.buyerId ? `<code>${escapeHTML(l.buyerId)}</code>` : '—'}</td><td>${l.price == null ? '—' : moneyLabel(l.price)}</td><td>${dateLabel(l.soldAt || l.createdAt)}</td></tr>`).join('');
+    return shell(`${header('SALES RECORD', 'Sold logs', 'A permanent record of every log that has been sold. Credentials are never shown here.', `<button class="button button-small" type="button" data-admin-action="refresh-page">${icon('refresh', 15)} Refresh</button>`)}${state.pageError ? alertBox(state.pageError, 'error', true) : ''}<section class="ej-admin-panel"><div class="ej-admin-filter-bar"><label class="ej-admin-search">${icon('search', 16)}<input data-admin-field="sold-query" type="search" value="${escapeHTML(state.soldQuery)}" placeholder="Search product, order or buyer"></label><span class="ej-admin-lock-pill">${escapeHTML(String(state.soldLogs.length))} sold · ${moneyLabel(state.soldTotal)}</span></div>${state.loading ? loadingBox() : visible.length ? `<div class="ej-admin-table-wrap"><table class="ej-admin-table"><thead><tr><th>Unit</th><th>Product</th><th>Platform</th><th>Order</th><th>Buyer</th><th>Price</th><th>Sold</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>` : emptyState('No sold logs yet', 'Logs appear here as soon as a customer buys them.', 'orders')}</section>`);
   }
   function uploadsPage() {
     const products = state.products.filter((p) => p.source === 'OWN' && p.status !== 'ARCHIVED');
@@ -810,6 +819,7 @@ export async function mountAdminTools(root, options = {}) {
     if (currentRoute === '/admin/products') return productsPage();
     if (currentRoute === '/admin/pricing' || currentRoute === '/admin/inventory') return productsPage();
     if (currentRoute === '/admin/uploads') return uploadsPage();
+    if (currentRoute === '/admin/sold-logs') return soldLogsPage();
     if (currentRoute === '/admin/orders') return ordersPage();
     if (currentRoute === '/admin/checkout') return ordersPage();
     if (currentRoute === '/admin/notifications') return notificationsPage();
@@ -1176,6 +1186,7 @@ export async function mountAdminTools(root, options = {}) {
       if (select.dataset.adminField === 'orders-status') state.orderStatus = select.value; else state.orderType = select.value;
       render();
     }));
+    root.querySelectorAll('[data-admin-field="sold-query"]').forEach((input) => input.addEventListener('input', () => { state.soldQuery = input.value; const pos = input.selectionStart; render(); const next = root.querySelector('[data-admin-field="sold-query"]'); if (next) { next.focus(); try { next.setSelectionRange(pos, pos); } catch { /* ignore */ } } }));
     root.querySelectorAll('[data-admin-field="inventory-query"]').forEach((input) => input.addEventListener('input', () => { state.inventory.query = input.value; const rows = root.querySelectorAll('.ej-admin-table tbody tr'); rows.forEach((row) => row.hidden = !row.textContent.toLowerCase().includes(input.value.toLowerCase())); }));
   }
 
