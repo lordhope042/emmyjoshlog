@@ -1,4 +1,3 @@
-
 'use strict';
 
 const express = require('express');
@@ -80,6 +79,9 @@ function optionalString(value, field, max = 1000) {
   return requireString(value, field, max);
 }
 function jsonWrite(req) {
+  // Bodyless writes (e.g. DELETE) carry no Content-Type; only enforce JSON when a body is actually sent.
+  const hasBody = Number(req.get('content-length') || 0) > 0 || req.get('transfer-encoding');
+  if (!hasBody) return;
   if (!/^application\/json(?:\s*;|$)/i.test(req.get('content-type') || '')) {
     fail(415, 'json_required', 'JSON requests are required');
   }

@@ -374,7 +374,7 @@ export async function mountAdminTools(root, options = {}) {
     const headers = new Headers(init.headers || {});
     headers.set('X-EJ-Request', '1');
     headers.set('Accept', 'application/json');
-    if (init.body !== undefined) headers.set('Content-Type', 'application/json');
+    if (init.body !== undefined || (init.method && init.method !== 'GET')) headers.set('Content-Type', 'application/json');
     if (csrfToken && init.method && init.method !== 'GET') headers.set('X-Admin-CSRF', csrfToken);
     const isRead = !init.method || init.method === 'GET';
     const endLoading = isRead && !init.loadingLabel ? () => {} : beginLoading(init.loadingLabel || 'Saving…');
