@@ -1,3 +1,4 @@
+
 'use strict';
 
 const express = require('express');
@@ -2372,6 +2373,57 @@ function createAdminRouter(options = {}) {
     }, 0n);
 
     res.json({ logs, count: logs.length, totalRevenue: minorToDecimal(totalMinor) });
+  }));
+
+  // ---- User management (customer accounts only; admins live in ej_admin_users) ----
+  router.get('/users', auth, use(async (_req, res) => {
+    const list = await rows(
+      db(),
+      `SELECT u."id", u."fullName", u."username", u."email", u."phoneNumber", u."status", u."createdAt",
+              w."balance" AS wallet_balance,
+              (SELECT COUNT(*) FROM ej_checkout_orders o WHERE o.user_id = u."id") AS order_count
+       FROM "User" u
+       LEFT JOIN "Wallet" w ON w."userId" = u."id"
+       WHERE u."role" = 'CUSTOMER'
+       ORDER BY u."createdAt" DESC
+       LIMIT 1000`,
+      [],
+    );
+    const users = list.map((row) => ({
+      id: row.id,
+      fullName: row.fullName || '',
+      username: row.username || '',
+      email: row.email || '',
+      phoneNumber: row.phoneNumber || '',
+      status: row.status,
+      walletBalance: row.wallet_balance == null ? '0' : String(row.wallet_balance),
+      orderCount: Number(row.order_count || 0),
+      createdAt: asDate(row.createdAt),
+    }));
+    res.json({
+      users,
+      total: users.length,
+      active: users.filter((u) => u.status === 'ACTIVE').length,
+      suspended: users.filter((u) => u.status === 'SUSPENDED').length,
+    });
+  }));
+
+  router.patch('/users/:id/status', auth, writeAuth, use(async (req, res) => {
+    const status = String(req.body?.status || '');
+    if (!['ACTIVE', 'SUSPENDED'].includes(status)) fail(400, 'invalid_status', 'Status must be ACTIVE or SUSPENDED');
+    const id = String(req.params.id);
+    await inTransaction(db(), async (tx) => {
+      const found = await rows(tx, `SELECT "id", "status" FROM "User" WHERE "id" = ? AND "role" = 'CUSTOMER' LIMIT 1`, [id]);
+      if (!found[0]) fail(404, 'user_not_found', 'Customer not found');
+      // Suspending also bumps tokenVersion so any signed-in session is revoked immediately.
+      await exec(
+        tx,
+        `UPDATE "User" SET "status" = ?, "tokenVersion" = "tokenVersion" + ?, "updatedAt" = ? WHERE "id" = ?`,
+        [status, status === 'SUSPENDED' ? 1 : 0, new Date(), id],
+      );
+      await audit(tx, req.admin, status === 'SUSPENDED' ? 'USER_SUSPENDED' : 'USER_ACTIVATED', id, { fromStatus: found[0].status, toStatus: status });
+    });
+    res.json({ id, status });
   }));
 
   router.get('/inventory', auth, use(async (req, res) => {

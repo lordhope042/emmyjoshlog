@@ -1,3 +1,4 @@
+import './motion.js';
 import { api, ApiError, getApiBase, setApiBase } from './api.js';
 import { mountAdminTools } from './admin-tools.js';
 import { beginLoading } from './loading.js';
@@ -1101,7 +1102,7 @@ function render() {
   }
   const query = new URLSearchParams(window.location.search);
   document.title = route === '/' ? 'Emmyjosh Logs Marketplace' : `${route.split('/').filter(Boolean).at(-1)?.replaceAll('-', ' ') || 'Marketplace'} · Emmyjosh Logs`;
-  const managedAdminRoutes = ['/admin', '/admin/login', '/admin/products', '/admin/pricing', '/admin/inventory', '/admin/uploads', '/admin/orders', '/admin/sold-logs', '/admin/checkout', '/admin/notifications', '/admin/supplier', '/admin/audit-logs'];
+  const managedAdminRoutes = ['/admin', '/admin/login', '/admin/products', '/admin/pricing', '/admin/inventory', '/admin/users', '/admin/orders', '/admin/sold-logs', '/admin/checkout', '/admin/notifications', '/admin/supplier', '/admin/audit-logs'];
   if (route.startsWith('/admin/') && !managedAdminRoutes.includes(route)) {
     history.replaceState({}, '', '/admin/login');
     return render();
