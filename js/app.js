@@ -1,3 +1,4 @@
+import './theme.js';
 import './motion.js';
 import { api, ApiError, getApiBase, setApiBase } from './api.js';
 import { mountAdminTools } from './admin-tools.js';
@@ -1027,7 +1028,7 @@ function adminSidebar(active) {
   const items = [
     ['dashboard', 'Overview', '/admin', 'home'], ['customers', 'Customers', '/admin/customers', 'user'],
     ['products', 'Products', '/admin/products', 'grid'], ['categories', 'Categories', '/admin/categories', 'grid'],
-    ['pricing', 'Pricing rules', '/admin/pricing', 'wallet'], ['uploads', 'Upload Logs', '/admin/uploads', 'plus'],
+    ['pricing', 'Pricing rules', '/admin/pricing', 'wallet'],
     ['inventory', 'Inventory', '/admin/inventory', 'file'],
     ['orders', 'Orders', '/admin/orders', 'bag'], ['transactions', 'Transactions', '/admin/transactions', 'arrows'],
     ['accounts', 'Virtual accounts', '/admin/virtual-accounts', 'wallet'], ['notifications', 'Notifications', '/admin/notifications', 'bell'],
