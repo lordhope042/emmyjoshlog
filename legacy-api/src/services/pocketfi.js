@@ -13,7 +13,7 @@ function cleanSecret(value) {
   return String(value || '').trim().replace(/^(["'])(.*)\1$/, '$2').trim();
 }
 
-function pocketfiConfig(overrides = {}) {
+function rawPocketfiConfig(overrides = {}) {
   const env = overrides.env || process.env;
   const mode = String(overrides.mode || env.POCKETFI_MODE || 'sandbox').trim().toLowerCase();
   const configuredBase = overrides.baseUrl !== undefined
@@ -30,6 +30,9 @@ function pocketfiConfig(overrides = {}) {
     // is the Bearer token for API calls; the secret key is the HMAC key for
     // webhook signatures.
     secretKey: cleanSecret(overrides.secretKey !== undefined ? overrides.secretKey : env.POCKETFI_SECRET_KEY),
+    // PocketFi's dashboard can show the webhook signing key under a different name (often "API token" /
+    // a 64-character hex value). It is tried as a signing key too.
+    apiToken: cleanSecret(overrides.apiToken !== undefined ? overrides.apiToken : env.POCKETFI_API_TOKEN),
     // Optional: only needed if PocketFi gives you a webhook signing key that differs from the API secret key.
     webhookSecret: cleanSecret(overrides.webhookSecret !== undefined ? overrides.webhookSecret : env.POCKETFI_WEBHOOK_SECRET),
     publicKey: String(overrides.publicKey !== undefined ? overrides.publicKey : (env.POCKETFI_PUBLIC_KEY || '')).trim(),
@@ -80,6 +83,22 @@ function minorToDecimal(minor) {
   const value = typeof minor === 'bigint' ? minor : BigInt(String(minor));
   if (value < 0n) throw new Error('Minor amount cannot be negative');
   return `${value / 100n}.${String(value % 100n).padStart(2, '0')}`;
+}
+
+// PocketFi's dashboard has two keys: a 64-character hex "Public Key" (signs webhooks) and an "id|token"
+// "Secret Key" (the Bearer token for API calls). Projects store them under swapped names, so the role is
+// decided by the SHAPE of the value, not by the variable name. Either naming works.
+function pocketfiConfig(overrides = {}) {
+  const cfg = rawPocketfiConfig(overrides);
+  const pool = [cfg.publicKey, cfg.secretKey, cfg.apiToken, cfg.webhookSecret].filter(Boolean);
+  const bearer = pool.find((value) => /^\d+\|\S+$/.test(value));
+  const signing = [cfg.webhookSecret, cfg.publicKey, cfg.secretKey, cfg.apiToken].find((value) => /^[0-9a-f]{64}$/i.test(value || ''));
+  return {
+    ...cfg,
+    publicKey: bearer || cfg.publicKey,
+    secretKey: signing || cfg.secretKey,
+    webhookSecret: cfg.webhookSecret || signing || '',
+  };
 }
 
 function hashFingerprint(value) {
@@ -309,14 +328,22 @@ function normalizeSignature(value) {
   return null;
 }
 
+// A value copied from documentation (YOUR_WEBHOOK_SIGNING_SECRET, <secret>, changeme ...) is not a real key.
+function isPlaceholder(value) {
+  return /^(your[_\s-]|<.*>$|change[_-]?me|xxx+|todo$|replace)/i.test(String(value || '').trim());
+}
+
 function verifyWebhookSignature(rawBody, signatureHeader, overrides = {}) {
   const cfg = pocketfiConfig(overrides);
-  const key = cfg.webhookSecret || cfg.secretKey;
+  const keys = [...new Set([cfg.webhookSecret, cfg.secretKey, cfg.apiToken].filter((key) => key && !isPlaceholder(key)))];
   const raw = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(String(rawBody ?? ''), 'utf8');
   const received = normalizeSignature(signatureHeader);
-  if (!key || !received) return false;
-  const expected = crypto.createHmac('sha512', key).update(raw).digest();
-  return received.length === expected.length && crypto.timingSafeEqual(expected, received);
+  if (!keys.length || !received) return false;
+  // Any one configured signing key may match; only the holder of that secret can produce a valid signature.
+  return keys.some((key) => {
+    const expected = crypto.createHmac('sha512', key).update(raw).digest();
+    return received.length === expected.length && crypto.timingSafeEqual(expected, received);
+  });
 }
 
 function sanitizeWebhookPayload(event) {

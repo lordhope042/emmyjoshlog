@@ -57,26 +57,45 @@ function candidateBodies(req) {
   return list;
 }
 
-// Diagnostic only: which configured credential (if any) produces the signature that arrived.
-// Only names are returned, never values, and nothing here is ever accepted as valid.
-function keyDiagnostics(candidates, signature, cfg) {
-  const given = (signature || '').trim().replace(/^sha512\s*[=:]\s*/i, '').toLowerCase();
-  const keys = {
+// Diagnostic only: which configured credential (if any) produces the signature that arrived, and how.
+// Only variable NAMES are returned, never values, and nothing here is ever accepted as valid.
+function credentialPool(cfg) {
+  const pool = {
     secretKey: cfg.secretKey,
     webhookSecret: cfg.webhookSecret,
     publicKey: cfg.publicKey,
     publicKeyToken: String(cfg.publicKey || '').split('|').pop(),
     businessId: cfg.businessId,
   };
+  // Any other POCKETFI_* variable that was set (a key pasted under a different name is a common cause).
+  for (const [name, value] of Object.entries(process.env)) {
+    if (/POCKET/i.test(name) && value && !/MODE|BANK|BASE_URL|ENABLED|BASIS|HEADER|CONFIRMED/i.test(name)) {
+      pool[`env:${name}`] = String(value).trim().replace(/^(["'])(.*)\1$/, '$2').trim();
+    }
+  }
+  return pool;
+}
+
+function keyDiagnostics(candidates, signature, cfg) {
+  const given = (signature || '').trim().replace(/^sha512\s*[=:]\s*/i, '').toLowerCase();
+  const pool = credentialPool(cfg);
   const matches = [];
   for (const [kind, body] of candidates) {
-    for (const [name, key] of Object.entries(keys)) {
+    for (const [name, key] of Object.entries(pool)) {
       if (!key) continue;
-      const digest = crypto.createHmac('sha512', key).update(body).digest('hex');
-      if (digest === given) matches.push(`${name}@${kind}`);
+      const tries = {
+        hmac: crypto.createHmac('sha512', key).update(body).digest('hex'),
+        'sha512(key+body)': crypto.createHash('sha512').update(Buffer.concat([Buffer.from(key), body])).digest('hex'),
+        'sha512(body+key)': crypto.createHash('sha512').update(Buffer.concat([body, Buffer.from(key)])).digest('hex'),
+      };
+      for (const [how, digest] of Object.entries(tries)) if (digest === given) matches.push(`${name}@${kind}/${how}`);
     }
   }
   return matches;
+}
+
+function configuredCredentialNames(cfg) {
+  return Object.entries(credentialPool(cfg)).filter(([, value]) => value).map(([name, value]) => `${name}(${String(value).length})`);
 }
 
 function eventIdFor(raw) {
@@ -161,6 +180,7 @@ router.post('/pocketfi', express.raw({ type: () => true, limit: '100kb' }), asyn
       contentType: req.headers['content-type'] || null,
       bodySource: candidates.map(([kind, body]) => `${kind}:${body.length}B`),
       keyMatchesSignature: keyDiagnostics(candidates, sig.value, cfg),
+      credentialsSet: configuredCredentialNames(cfg),
       secretConfigured: Boolean(cfg.webhookSecret || cfg.secretKey),
       secretLength: (cfg.webhookSecret || cfg.secretKey).length,
       headerNames: sig.name ? undefined : Object.keys(req.headers),
