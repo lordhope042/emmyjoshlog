@@ -22,21 +22,61 @@ function signatureFrom(headers, configured) {
   return { name: '', value: '' };
 }
 
-// The exact bytes PocketFi signed. Normally the raw body; if a parser upstream already consumed the stream
-// (so only a parsed object is left), fall back to re-serialising it, which verifies whenever PocketFi's
-// JSON formatting matches. Every candidate must still pass the HMAC check, so this never weakens security.
+// What PocketFi may have signed. Every candidate must still pass the HMAC check, so adding forms here never
+// weakens security: only the holder of the secret can produce a matching signature.
+//   raw       the exact bytes received
+//   compact   the same JSON with no whitespace (PocketFi sends pretty-printed JSON, which suggests the
+//             signature may be computed over the compact form)
+//   php       compact with escaped slashes / \uXXXX, as PHP's json_encode writes by default
+// If a parser upstream already consumed the stream, only the parsed object is left, so it is re-serialised.
+function phpEscape(json) {
+  return json
+    .replace(/\//g, '\\/')
+    .replace(/[\u0080-\uffff]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
 function candidateBodies(req) {
   const list = [];
-  if (Buffer.isBuffer(req.body) && req.body.length) list.push(['raw', req.body]);
-  if (Buffer.isBuffer(req.rawBody) && req.rawBody.length) list.push(['rawBody', req.rawBody]);
-  else if (typeof req.rawBody === 'string' && req.rawBody) list.push(['rawBody', Buffer.from(req.rawBody, 'utf8')]);
-  const parsed = req.body;
-  if (parsed && typeof parsed === 'object' && !Buffer.isBuffer(parsed) && Object.keys(parsed).length) {
-    const json = JSON.stringify(parsed);
-    list.push(['reserialized', Buffer.from(json, 'utf8')]);
-    list.push(['reserialized-escaped-slashes', Buffer.from(json.replace(/\//g, '\\/'), 'utf8')]);
+  let raw = null;
+  if (Buffer.isBuffer(req.body) && req.body.length) raw = req.body;
+  else if (Buffer.isBuffer(req.rawBody) && req.rawBody.length) raw = req.rawBody;
+  else if (typeof req.rawBody === 'string' && req.rawBody) raw = Buffer.from(req.rawBody, 'utf8');
+  if (raw) list.push(['raw', raw]);
+
+  let parsed = null;
+  if (raw) {
+    try { parsed = JSON.parse(raw.toString('utf8')); } catch { parsed = null; }
+  } else if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body) && Object.keys(req.body).length) {
+    parsed = req.body;
+  }
+  if (parsed && typeof parsed === 'object') {
+    const compact = JSON.stringify(parsed);
+    list.push(['compact', Buffer.from(compact, 'utf8')]);
+    list.push(['php', Buffer.from(phpEscape(compact), 'utf8')]);
   }
   return list;
+}
+
+// Diagnostic only: which configured credential (if any) produces the signature that arrived.
+// Only names are returned, never values, and nothing here is ever accepted as valid.
+function keyDiagnostics(candidates, signature, cfg) {
+  const given = (signature || '').trim().replace(/^sha512\s*[=:]\s*/i, '').toLowerCase();
+  const keys = {
+    secretKey: cfg.secretKey,
+    webhookSecret: cfg.webhookSecret,
+    publicKey: cfg.publicKey,
+    publicKeyToken: String(cfg.publicKey || '').split('|').pop(),
+    businessId: cfg.businessId,
+  };
+  const matches = [];
+  for (const [kind, body] of candidates) {
+    for (const [name, key] of Object.entries(keys)) {
+      if (!key) continue;
+      const digest = crypto.createHmac('sha512', key).update(body).digest('hex');
+      if (digest === given) matches.push(`${name}@${kind}`);
+    }
+  }
+  return matches;
 }
 
 function eventIdFor(raw) {
@@ -120,6 +160,7 @@ router.post('/pocketfi', express.raw({ type: () => true, limit: '100kb' }), asyn
       signatureLength: sig.value.length,
       contentType: req.headers['content-type'] || null,
       bodySource: candidates.map(([kind, body]) => `${kind}:${body.length}B`),
+      keyMatchesSignature: keyDiagnostics(candidates, sig.value, cfg),
       secretConfigured: Boolean(cfg.webhookSecret || cfg.secretKey),
       secretLength: (cfg.webhookSecret || cfg.secretKey).length,
       headerNames: sig.name ? undefined : Object.keys(req.headers),
