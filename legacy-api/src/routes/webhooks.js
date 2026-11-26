@@ -11,11 +11,32 @@ const pocketfi = require('../services/pocketfi');
 function signatureFrom(headers, configured) {
   const given = String(configured || '').trim().toLowerCase();
   const normalized = given.replace(/^http_/, '').replace(/_/g, '-');
-  for (const name of [given, normalized, 'pocketfi-signature', 'x-pocketfi-signature']) {
+  for (const name of [given, normalized, 'pocketfi-signature', 'x-pocketfi-signature', 'x-signature', 'signature']) {
     const value = name ? headers[name] : undefined;
-    if (typeof value === 'string' && value.trim()) return value;
+    if (typeof value === 'string' && value.trim()) return { name, value };
   }
-  return '';
+  // Last resort: any header with "signature" in its name.
+  for (const [name, value] of Object.entries(headers)) {
+    if (/signature/i.test(name) && typeof value === 'string' && value.trim()) return { name, value };
+  }
+  return { name: '', value: '' };
+}
+
+// The exact bytes PocketFi signed. Normally the raw body; if a parser upstream already consumed the stream
+// (so only a parsed object is left), fall back to re-serialising it, which verifies whenever PocketFi's
+// JSON formatting matches. Every candidate must still pass the HMAC check, so this never weakens security.
+function candidateBodies(req) {
+  const list = [];
+  if (Buffer.isBuffer(req.body) && req.body.length) list.push(['raw', req.body]);
+  if (Buffer.isBuffer(req.rawBody) && req.rawBody.length) list.push(['rawBody', req.rawBody]);
+  else if (typeof req.rawBody === 'string' && req.rawBody) list.push(['rawBody', Buffer.from(req.rawBody, 'utf8')]);
+  const parsed = req.body;
+  if (parsed && typeof parsed === 'object' && !Buffer.isBuffer(parsed) && Object.keys(parsed).length) {
+    const json = JSON.stringify(parsed);
+    list.push(['reserialized', Buffer.from(json, 'utf8')]);
+    list.push(['reserialized-escaped-slashes', Buffer.from(json.replace(/\//g, '\\/'), 'utf8')]);
+  }
+  return list;
 }
 
 function eventIdFor(raw) {
@@ -87,17 +108,25 @@ function retained(res, reason) {
 
 // This route is mounted before the legacy JSON parser. Signature verification
 // always uses the exact bytes received from PocketFi, including in development.
-router.post('/pocketfi', express.raw({ type: 'application/json', limit: '100kb' }), async (req, res) => {
-  const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+router.post('/pocketfi', express.raw({ type: () => true, limit: '100kb' }), async (req, res) => {
   const cfg = pocketfi.pocketfiConfig();
-  const signature = signatureFrom(req.headers, cfg.signatureHeader);
-  if (!pocketfi.verifyWebhookSignature(raw, signature, cfg)) {
-    // Header NAMES only, never values, so a wrong header name can be diagnosed from the logs.
-    console.warn(signature
-      ? '[pocketfi] webhook rejected: signature did not match (check POCKETFI_SECRET_KEY is the webhook signing key)'
-      : `[pocketfi] webhook rejected: no signature header found. Headers received: ${Object.keys(req.headers).join(', ')}`);
+  const sig = signatureFrom(req.headers, cfg.signatureHeader);
+  const candidates = candidateBodies(req);
+  const verified = candidates.find(([, body]) => pocketfi.verifyWebhookSignature(body, sig.value, cfg));
+  if (!verified) {
+    // Never log secrets, signatures or bodies: only shapes, so the cause can be told from the logs.
+    console.warn('[pocketfi] webhook rejected (invalid signature).', JSON.stringify({
+      signatureHeader: sig.name || null,
+      signatureLength: sig.value.length,
+      contentType: req.headers['content-type'] || null,
+      bodySource: candidates.map(([kind, body]) => `${kind}:${body.length}B`),
+      secretConfigured: Boolean(cfg.webhookSecret || cfg.secretKey),
+      secretLength: (cfg.webhookSecret || cfg.secretKey).length,
+      headerNames: sig.name ? undefined : Object.keys(req.headers),
+    }));
     return res.status(400).json({ message: 'Invalid signature' });
   }
+  const raw = verified[1];
 
   let payload;
   try {

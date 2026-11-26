@@ -41,6 +41,18 @@ html body code,html body kbd,html body samp,html body pre,html body .lp-secret,h
   font-family:var(--ej-mono);font-variant-ligatures:none;
 }
 
+/* Wallet deposit card + transaction filters */
+.account-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.account-actions .button{display:inline-flex;align-items:center;gap:8px}
+.deposit-steps{list-style:none;counter-reset:step;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0 6px;padding:0}
+.deposit-steps li{counter-increment:step;position:relative;padding:14px 14px 14px 52px;border:1px solid rgba(232,101,10,.18);border-radius:14px;background:rgba(255,248,240,.7);font-size:.9rem;line-height:1.4}
+.deposit-steps li::before{content:counter(step);position:absolute;left:14px;top:50%;transform:translateY(-50%);width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--o,#e8650a);color:#fff;font:700 .8rem var(--ej-display)}
+.tx-filter-panel{display:flex;flex-wrap:wrap;gap:18px 32px;align-items:flex-end;margin:0 0 14px;padding:14px 16px;border:1px solid rgba(232,101,10,.18);border-radius:14px;background:rgba(255,248,240,.7)}
+.tx-filter-panel>div>b{display:block;margin-bottom:8px;font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;opacity:.7}
+.tx-filter-panel .filter-chips{margin:0}
+.chip small{margin-left:6px;opacity:.6;font-size:.75em}
+.chip{cursor:pointer}
+
 /* Small details */
 ::selection{background:rgba(232,101,10,.22);color:inherit}
 :focus-visible{outline:2px solid #e8650a;outline-offset:2px;border-radius:6px}

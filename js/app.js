@@ -841,7 +841,7 @@ function authPage(kind) {
         <div class="lp-auth-inner">
           <h1 class="lp-h1 lp-rv">${isLogin ? 'Sign in' : 'Create your <span class="lp-muted">account</span>'}</h1>
           <p class="lp-lead lp-rv" style="--d:100ms">${isLogin ? 'Enter your details to continue to your account.' : 'It takes a minute.'}</p>
-          ${state.authMessage ? `<p class="lp-feedback" role="status">${escapeHTML(state.authMessage)}</p>` : ''}
+          ${state.authMessage && state.authMessage !== SESSION_EXPIRED_MESSAGE ? `<p class="lp-feedback" role="status">${escapeHTML(state.authMessage)}</p>` : ''}
           <form class="lp-form lp-rv" style="--d:180ms" data-form="${isLogin ? 'login' : 'register'}">
             ${isLogin ? loginFields : registerFields}
             <button class="lp-pill lp-submit" type="submit">${isLogin ? 'Login' : 'Register account'} ${icon('arrow', 17)}</button>
@@ -867,7 +867,7 @@ function walletPage() {
   const balanceCaption = state.wallet ? 'Balance returned by your wallet API.' : (getApiBase() ? 'Sign in to load a verified wallet balance.' : 'Example balance · preview only');
   const transactions = state.transactions !== null ? mapTransactions(state.transactions).slice(0, 3) : (getApiBase() ? [] : sampleTransactions.slice(0, 3));
   return accountShell('wallet', `${pageHeading('YOUR MONEY', 'Wallet', 'View your balance and manage supported deposit options.')}
-    <section class="wallet-layout"><div class="wallet-balance-card"><div><span>Wallet balance</span><strong>${balance}</strong><small>${balanceCaption}</small></div><span class="balance-mark">${icon('wallet', 31)}</span></div><article class="panel wallet-fund-card"><div class="panel-head"><div><span class="eyebrow">FUND YOUR WALLET</span><h2>Deposit funds</h2></div><span class="secure-pill">${icon('shield', 15)} Verified transfers</span></div><p>Request a dedicated virtual account after signing in. Transfers are credited only after the payment provider verifies the event.</p><div class="deposit-methods"><div class="deposit-option active">${icon('bank', 21)}<b>Bank transfer</b><small>Provider account</small></div></div>${state.account ? `<div class="account-details"><div class="account-created"><span>${icon('check', 18)} Account details returned by API</span><small>Verify the account and provider instructions before sending funds.</small></div><dl><div><dt>Bank</dt><dd>${escapeHTML(state.account.bankName || '—')}</dd></div><div><dt>Account name</dt><dd>${escapeHTML(state.account.accountName || '—')}</dd></div><div><dt>Account number</dt><dd><strong>${escapeHTML(state.account.accountNumber || '—')}</strong><button class="icon-button" data-action="copy-account" aria-label="Copy account number">${icon('copy', 17)}</button></dd></div></dl></div>` : `<form class="inline-account-form" data-form="virtual-account"><label>Phone number for your dedicated account<input name="phoneNumber" type="tel" required minlength="7" placeholder="e.g. +234 810 123 4567"></label><button class="button" type="submit">Create virtual account ${icon('arrow', 16)}</button></form><p class="muted-caption">This requests an account from the configured backend. No bank details are invented in preview.</p>`}</article></section>
+    <section class="wallet-layout"><div class="wallet-balance-card"><div><span>Wallet balance</span><strong>${balance}</strong><small>${balanceCaption}</small></div><span class="balance-mark">${icon('wallet', 31)}</span></div><article class="panel wallet-fund-card"><div class="panel-head"><div><span class="eyebrow">FUND YOUR WALLET</span><h2>Add money to your wallet</h2></div><span class="secure-pill">${icon('bank', 15)} Bank transfer</span></div><p>${state.account ? 'Send money to your personal account below. Your wallet is credited automatically once the bank confirms the payment.' : 'Get a personal bank account for your wallet. Transfer to it from any bank app and your balance updates automatically.'}</p>${state.account ? `<div class="account-details"><div class="account-created"><span>${icon('check', 18)} Your account is ready</span><small>Always check that the account name matches before you send money.</small></div><dl><div><dt>Bank</dt><dd>${escapeHTML(state.account.bankName || '—')}</dd></div><div><dt>Account name</dt><dd>${escapeHTML(state.account.accountName || '—')}</dd></div><div><dt>Account number</dt><dd><strong>${escapeHTML(state.account.accountNumber || '—')}</strong><button class="icon-button" data-action="copy-account" aria-label="Copy account number">${icon('copy', 17)}</button></dd></div></dl><div class="account-actions"><button class="button button-small" type="button" data-action="copy-account">${icon('copy', 15)} Copy account number</button><button class="button button-outline button-small" type="button" data-action="copy-account-details">Copy all details</button><button class="button button-outline button-small" type="button" data-action="refresh-wallet">${icon('arrows', 15)} Check for deposit</button></div></div><ol class="deposit-steps"><li><b>Copy</b> the account number</li><li><b>Transfer</b> any amount from your bank app</li><li><b>Done</b> – your balance updates automatically</li></ol><p class="muted-caption">A small provider fee may be deducted from deposits. If a transfer has not appeared after a few minutes, tap “Check for deposit” or contact support with your transfer reference.</p>` : `<form class="inline-account-form" data-form="virtual-account"><label>Phone number for your account<input name="phoneNumber" type="tel" required minlength="7" placeholder="e.g. 0810 123 4567"></label><button class="button" type="submit">Create my account ${icon('arrow', 16)}</button></form><p class="muted-caption">You only need to do this once. The same account is used for all your future deposits.</p>`}</article></section>
     <section class="panel"><div class="panel-head"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Wallet transactions</h2></div><a data-link class="text-link" href="/transactions">View all ${icon('arrow', 14)}</a></div>${transactionRows(transactions)}${getApiBase() ? '' : `<div class="preview-footnote">${icon('eye', 15)} Example wallet activity only.</div>`}</section>`);
 }
 
@@ -924,6 +924,8 @@ function mapTransactions(rows) {
       amount: item.amount ?? item.value ?? 0,
       status: item.status || '—',
       direction: incoming ? 'in' : 'out',
+      kind: /REFUND/.test(rawType) ? 'Refunds' : (incoming ? 'Credits' : 'Purchases'),
+      ts: Date.parse(item.createdAt || item.date) || 0,
     };
   });
 }
@@ -982,10 +984,26 @@ function orderDetailPage(id) {
 function numbersPage() { return renderNumbersPage({ state, pageHeading, accountShell, icon }); }
 function numberOrderPage() { return renderNumberOrderPage({ state, pageHeading, accountShell, icon }); }
 
+const TX_FILTERS = ['All', 'Credits', 'Purchases', 'Refunds'];
+
 function transactionsPage() {
-  const transactions = state.transactions ?? (getApiBase() ? [] : sampleTransactions);
+  const all = mapTransactions(state.transactions ?? (getApiBase() ? [] : sampleTransactions));
+  const filter = TX_FILTERS.includes(state.txFilter) ? state.txFilter : 'All';
+  const status = state.txStatus || 'All';
+  const sort = state.txSort === 'old' ? 'old' : 'new';
+  const statuses = ['All', ...new Set(all.map((tx) => String(tx.status)).filter((value) => value && value !== '—'))];
+  const rows = all
+    .filter((tx) => (filter === 'All' || tx.kind === filter) && (status === 'All' || String(tx.status) === status))
+    .sort((a, b) => (sort === 'old' ? a.ts - b.ts : b.ts - a.ts));
+  const activeCount = (status !== 'All' ? 1 : 0) + (sort !== 'new' ? 1 : 0);
+  const count = (name) => (name === 'All' ? all.length : all.filter((tx) => tx.kind === name).length);
+  const chips = TX_FILTERS.map((name) => `<button class="chip ${name === filter ? 'active' : ''}" type="button" aria-pressed="${name === filter}" data-action="tx-filter" data-filter="${name}">${name} <small>${count(name)}</small></button>`).join('');
+  const panel = state.txFilterOpen ? `<div class="tx-filter-panel"><div><b>Status</b><div class="filter-chips">${statuses.map((value) => `<button class="chip ${value === status ? 'active' : ''}" type="button" data-action="tx-status" data-value="${escapeHTML(value)}">${escapeHTML(value)}</button>`).join('')}</div></div><div><b>Order</b><div class="filter-chips"><button class="chip ${sort === 'new' ? 'active' : ''}" type="button" data-action="tx-sort" data-value="new">Newest first</button><button class="chip ${sort === 'old' ? 'active' : ''}" type="button" data-action="tx-sort" data-value="old">Oldest first</button></div></div><button class="link-button" type="button" data-action="tx-reset">Clear filters</button></div>` : '';
+  const body = rows.length
+    ? transactionRows(rows)
+    : `<div class="empty-state"><span>${icon('filter', 24)}</span><b>${all.length ? 'No transactions match' : 'No transactions yet'}</b><p>${all.length ? 'Try a different filter.' : 'Your deposits and purchases will appear here.'}</p>${all.length ? '<button class="button button-small" type="button" data-action="tx-reset">Clear filters</button>' : ''}</div>`;
   return accountShell('transactions', `${pageHeading('WALLET LEDGER', 'Transaction history', 'A clear record of wallet credits, purchases, and other account activity.')}
-    <section class="panel"><div class="panel-head"><div><span class="eyebrow">YOUR WALLET</span><h2>Transactions</h2></div><button class="button button-outline button-small" data-action="filter-transactions">${icon('filter', 16)} Filter</button></div><div class="filter-chips"><button class="chip active">All</button><button class="chip">Credits</button><button class="chip">Purchases</button><button class="chip">Refunds</button></div>${transactionRows(mapTransactions(transactions))}${getApiBase() ? '' : `<div class="preview-footnote">${icon('eye', 15)} Example ledger only. Confirmed transactions are read from the API.</div>`}</section>`);
+    <section class="panel"><div class="panel-head"><div><span class="eyebrow">YOUR WALLET</span><h2>Transactions</h2></div><button class="button button-outline button-small" type="button" aria-expanded="${Boolean(state.txFilterOpen)}" data-action="filter-transactions">${icon('filter', 16)} Filter${activeCount ? ` (${activeCount})` : ''}</button></div>${panel}<div class="filter-chips" role="group" aria-label="Transaction type">${chips}</div>${body}${getApiBase() ? '' : `<div class="preview-footnote">${icon('eye', 15)} Example ledger only. Confirmed transactions are read from the API.</div>`}</section>`);
 }
 
 function profilePage() {
@@ -1886,7 +1904,24 @@ function bindEvents() {
       state.orderFilter = control.dataset.filter || 'All orders';
       render();
     }
-    if (action === 'filter-transactions') toast('Filtering will be connected to transaction query parameters.', 'info');
+    if (action === 'filter-transactions') { state.txFilterOpen = !state.txFilterOpen; render(); }
+    if (action === 'tx-filter') { state.txFilter = control.dataset.filter || 'All'; render(); }
+    if (action === 'tx-status') { state.txStatus = control.dataset.value || 'All'; render(); }
+    if (action === 'tx-sort') { state.txSort = control.dataset.value === 'old' ? 'old' : 'new'; render(); }
+    if (action === 'tx-reset') { state.txFilter = 'All'; state.txStatus = 'All'; state.txSort = 'new'; render(); }
+    if (action === 'copy-account-details') {
+      const acct = state.account;
+      if (!acct?.accountNumber) return toast('No account details are available.', 'error');
+      const text = `Bank: ${acct.bankName || '—'}\nAccount name: ${acct.accountName || '—'}\nAccount number: ${acct.accountNumber}`;
+      try { await navigator.clipboard.writeText(text); toast('Account details copied.', 'success'); }
+      catch { toast('Copy is not available in this browser.', 'error'); }
+    }
+    if (action === 'refresh-wallet') {
+      control.disabled = true;
+      try { await loadWalletAccount(); toast('Wallet updated.', 'success'); }
+      catch { toast('Could not refresh your wallet. Please try again.', 'error'); }
+      finally { render(); }
+    }
   }));
 
   app.querySelectorAll('[data-change="sort"]').forEach((select) => select.addEventListener('change', () => {

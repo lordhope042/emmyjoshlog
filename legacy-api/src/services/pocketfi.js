@@ -8,6 +8,11 @@ const OFFICIAL_SANDBOX_BASE = 'https://api.pocketfi.ng/api/test';
 const BANKS = new Set(['saveheaven', 'paga', 'kuda', '9psb', 'palmpay']);
 const OPERATION_STATES = new Set(['REQUESTED', 'DISPATCHED', 'UNKNOWN', 'SUCCEEDED']);
 
+// Environment values pasted with wrapping quotes or stray whitespace/newlines would silently break HMAC checks.
+function cleanSecret(value) {
+  return String(value || '').trim().replace(/^(["'])(.*)\1$/, '$2').trim();
+}
+
 function pocketfiConfig(overrides = {}) {
   const env = overrides.env || process.env;
   const mode = String(overrides.mode || env.POCKETFI_MODE || 'sandbox').trim().toLowerCase();
@@ -24,7 +29,9 @@ function pocketfiConfig(overrides = {}) {
     // PocketFi has no separate API token. The public key (the "id|token" value)
     // is the Bearer token for API calls; the secret key is the HMAC key for
     // webhook signatures.
-    secretKey: String(overrides.secretKey !== undefined ? overrides.secretKey : (env.POCKETFI_SECRET_KEY || '')).trim(),
+    secretKey: cleanSecret(overrides.secretKey !== undefined ? overrides.secretKey : env.POCKETFI_SECRET_KEY),
+    // Optional: only needed if PocketFi gives you a webhook signing key that differs from the API secret key.
+    webhookSecret: cleanSecret(overrides.webhookSecret !== undefined ? overrides.webhookSecret : env.POCKETFI_WEBHOOK_SECRET),
     publicKey: String(overrides.publicKey !== undefined ? overrides.publicKey : (env.POCKETFI_PUBLIC_KEY || '')).trim(),
     businessId: String(overrides.businessId !== undefined ? overrides.businessId : (env.POCKETFI_BUSINESS_ID || '')).trim(),
     bank,
@@ -53,7 +60,15 @@ function reconciliationError(state = 'UNKNOWN', cause) {
 }
 
 function decimalToMinor(value, { allowZero = false } = {}) {
-  const text = typeof value === 'number' ? String(value) : String(value ?? '').trim();
+  let text;
+  if (typeof value === 'number') {
+    // PocketFi sends JSON numbers with floating-point noise (a fee of 1.8 arrives as 1.8000000000000003).
+    // Accept a number only if it is a whole number of kobo, then format it to exactly 2 decimals.
+    if (!Number.isFinite(value) || value < 0 || Math.abs(value * 100 - Math.round(value * 100)) > 1e-6) throw new Error('Invalid NGN decimal');
+    text = value.toFixed(2);
+  } else {
+    text = String(value ?? '').trim();
+  }
   if (!/^\d+(?:\.\d{1,2})?$/.test(text)) throw new Error('Invalid NGN decimal');
   const [whole, fraction = ''] = text.split('.');
   const minor = BigInt(whole) * 100n + BigInt((fraction + '00').slice(0, 2));
@@ -286,13 +301,21 @@ async function createDedicatedAccount({ user, fullName, email, phoneNumber, refe
   }
 }
 
+function normalizeSignature(value) {
+  let supplied = String(value || '').trim().replace(/^(["'])(.*)\1$/, '$2').trim();
+  supplied = supplied.replace(/^sha512\s*[=:]\s*/i, '');
+  if (/^[0-9a-f]{128}$/i.test(supplied)) return Buffer.from(supplied, 'hex');
+  if (/^[A-Za-z0-9+/]{86}==$/.test(supplied)) return Buffer.from(supplied, 'base64'); // base64 form of a SHA-512 digest
+  return null;
+}
+
 function verifyWebhookSignature(rawBody, signatureHeader, overrides = {}) {
   const cfg = pocketfiConfig(overrides);
+  const key = cfg.webhookSecret || cfg.secretKey;
   const raw = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(String(rawBody ?? ''), 'utf8');
-  const supplied = String(signatureHeader || '').trim();
-  if (!cfg.secretKey || !/^[0-9a-f]{128}$/i.test(supplied)) return false;
-  const expected = crypto.createHmac('sha512', cfg.secretKey).update(raw).digest();
-  const received = Buffer.from(supplied, 'hex');
+  const received = normalizeSignature(signatureHeader);
+  if (!key || !received) return false;
+  const expected = crypto.createHmac('sha512', key).update(raw).digest();
   return received.length === expected.length && crypto.timingSafeEqual(expected, received);
 }
 
